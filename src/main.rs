@@ -2,44 +2,63 @@
 // 6502 hexdump Decoder
 // Author: Will Howes
 
-use std::io::{self, BufReader};
-use std::io::prelude::*;
 use std::fs::File;
+use std::io::prelude::*;
+use std::io::{self, BufReader};
 
-// enum SysVars {
-//     A,
-//     X,
-//     Y,
-//     Z,
-//     PC,
-// }
+/// Type for storing CPU registers
+struct Registers {
+    a: Option<usize>,
+    x: Option<usize>,
+    y: Option<usize>,
+    z: Option<usize>,
+    pc: Option<usize>,
+}
 
+/// loads instruction at address of pc, increments pc
+fn lb(memory: &mut [u8], pc: usize) -> (u8, usize) {
+    (memory[pc], pc+1)
+}
 
 fn main() -> io::Result<()> {
-    // let pc = None;
+    let mut registers = Registers {
+        a: Some(0),
+        x: Some(0),
+        y: Some(0),
+        z: Some(0),
+        pc: None,
+    };
 
     // initialize memory array to all zeroes
-    let mut memory: [i32; 1000] = [0; 1000];
-    memory[16] = 2;
-    println!("0010: {:?}", &memory[16..32]);
+    let mut memory: [u8; 1000] = [0; 1000];
+    // memory[16] = 2;
 
     let f = File::open("countdown.txt")?;
     let f = BufReader::new(f);
 
     for line in f.lines() {
-        // println!("{}", line.unwrap());
-        let good = line?;
-        let hexdump: Vec<&str> = good.split(' ').collect();
-        for hex in hexdump {
-            println!("{hex}")
+        let line = line?;
+        let hexdump: Vec<&str> = line.split(' ').collect();
+
+        // Identify location of code in memory
+        let loc_length = hexdump[0].chars().count();
+        let loc = &hexdump[0][0..loc_length - 1];
+        let mut loc: usize = loc.parse().unwrap();
+        if registers.pc == None {
+            registers.pc = Some(loc as i32);
+        };
+
+        // Write instructions to memory
+        println!("LINE : {}",registers.pc.unwrap());
+        for hex in &hexdump[1..] {
+            println!("{} || {:b}", hex, u8::from_str_radix(hex, 16).unwrap());
+            memory[loc] = u8::from_str_radix(hex, 16).unwrap();
+            loc+=1;
         }
-        // let loc = int(hexdump[0][:-1])
-        // if pc == None:
-        //     pc = loc
-        // # write instructions to memory
-        // for instr in hexdump[1:]:
-        //     memory[loc] = int(instr, 16)
-        //     loc += 1
+
+        // Inspect memory
+        println!("0600: {:?}", &memory[600..616]);
+        println!("0010: {:?}", &memory[16..32]);
     }
 
     Ok(())
