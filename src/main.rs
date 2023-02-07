@@ -109,7 +109,9 @@ fn lb(memory: &[u8], cpu: &mut CPU) -> u8 {
     memory[index as usize]
 }
 
-fn load_program(memory: &mut [u8], cpu: &mut CPU) -> io::Result<()> {
+fn load_program(computer: &mut Computer) -> io::Result<()> {
+    let memory = &mut computer.memory;
+    let cpu = &mut computer.cpu;
     // Load file contents into a buffer
     let f = File::open("countdown.txt")?;
     let f = BufReader::new(f);
@@ -132,7 +134,6 @@ fn load_program(memory: &mut [u8], cpu: &mut CPU) -> io::Result<()> {
         // Write instructions to memory
         println!("LINE : {}", cpu.pc);
         for hex in &hexdump[1..] {
-            // println!("{} || {:b}", hex, u8::from_str_radix(hex, 16).unwrap());
             memory[usize::from(loc)] = u8::from_str_radix(hex, 16).unwrap();
             loc += 1;
         }
@@ -141,40 +142,39 @@ fn load_program(memory: &mut [u8], cpu: &mut CPU) -> io::Result<()> {
     Ok(())
 }
 
-fn run_program(memory: &mut [u8], mut cpu: CPU) -> CPU {
+fn run_program(computer: &mut Computer) {
+    let memory = &mut computer.memory;
+    let cpu = &mut computer.cpu;
+
     while usize::from(cpu.pc) < memory.len() {
-        let instruction = lb(&memory, &mut cpu);
+        let instruction = lb(memory, cpu);
         let instruction = usize::from(instruction);
         let instruction = Instruction::from_repr(instruction);
         let instruction = instruction.unwrap_or_default();
         cpu.process_instruction(instruction, memory);
     }
-
-    cpu
 }
 
 fn main() {
-    let mut cpu = CPU {
-        a: 0,
-        x: 0,
-        y: 0,
-        z: 0,
-        pc: 0,
+    let mut computer = Computer {
+        cpu: CPU {
+            a: 0,
+            x: 0,
+            y: 0,
+            z: 0,
+            pc: 0,
+        },
+        memory: [0; MEMORY_SIZE],
     };
 
-    // initialize memory array to all zeroes
-    let mut memory: [u8; 1000] = [0; 1000];
-
-    let program = load_program(&mut memory, &mut cpu);
+    let program = load_program(&mut computer);
     program.unwrap(); // verify that program loaded
 
-    println!("0600: {:?}", &memory[600..616]);
-    println!("0016: {:?}", &memory[16..32]);
+    println!("BEFORE: 0600: {:?}", &computer.memory[600..616]);
+    println!("BEFORE: 0016: {:?}", &computer.memory[16..32]);
 
-    let cpu = run_program(&mut memory, cpu);
-    println!("Register x after run_program: {}", cpu.x);
-
-    println!("0016: {:?}", &memory[16..32]);
+    run_program(&mut computer);
+    println!("AFTER : 0016: {:?}", &computer.memory[16..32]);
 }
 
 // #[cfg(test)]
