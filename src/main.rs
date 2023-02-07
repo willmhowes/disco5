@@ -102,57 +102,59 @@ struct Computer {
     memory: [u8; MEMORY_SIZE],
 }
 
+impl Computer {
+    fn load_program(&mut self) -> io::Result<()> {
+        let memory = &mut self.memory;
+        let cpu = &mut self.cpu;
+        // Load file contents into a buffer
+        let f = File::open("countdown.txt")?;
+        let f = BufReader::new(f);
+
+        // Iterate through each line in file
+        // Currently only supports one line
+        for line in f.lines() {
+            let line = line?;
+            let hexdump: Vec<&str> = line.split(' ').collect();
+
+            // Identify location of code in memory
+            let loc_length = hexdump[0].chars().count();
+            let loc = &hexdump[0][0..loc_length - 1];
+            let mut loc: u16 = loc.parse().unwrap();
+
+            if cpu.pc == 0 {
+                cpu.pc = loc;
+            };
+
+            // Write instructions to memory
+            println!("LINE : {}", cpu.pc);
+            for hex in &hexdump[1..] {
+                memory[usize::from(loc)] = u8::from_str_radix(hex, 16).unwrap();
+                loc += 1;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn run_program(&mut self) {
+        let memory = &mut self.memory;
+        let cpu = &mut self.cpu;
+
+        while usize::from(cpu.pc) < memory.len() {
+            let instruction = lb(memory, cpu);
+            let instruction = usize::from(instruction);
+            let instruction = Instruction::from_repr(instruction);
+            let instruction = instruction.unwrap_or_default();
+            cpu.process_instruction(instruction, memory);
+        }
+    }
+}
+
 /// loads instruction at address of pc, increments pc
 fn lb(memory: &[u8], cpu: &mut CPU) -> u8 {
     let index = cpu.pc;
     cpu.step();
     memory[index as usize]
-}
-
-fn load_program(computer: &mut Computer) -> io::Result<()> {
-    let memory = &mut computer.memory;
-    let cpu = &mut computer.cpu;
-    // Load file contents into a buffer
-    let f = File::open("countdown.txt")?;
-    let f = BufReader::new(f);
-
-    // Iterate through each line in file
-    // Currently only supports one line
-    for line in f.lines() {
-        let line = line?;
-        let hexdump: Vec<&str> = line.split(' ').collect();
-
-        // Identify location of code in memory
-        let loc_length = hexdump[0].chars().count();
-        let loc = &hexdump[0][0..loc_length - 1];
-        let mut loc: u16 = loc.parse().unwrap();
-
-        if cpu.pc == 0 {
-            cpu.pc = loc;
-        };
-
-        // Write instructions to memory
-        println!("LINE : {}", cpu.pc);
-        for hex in &hexdump[1..] {
-            memory[usize::from(loc)] = u8::from_str_radix(hex, 16).unwrap();
-            loc += 1;
-        }
-    }
-
-    Ok(())
-}
-
-fn run_program(computer: &mut Computer) {
-    let memory = &mut computer.memory;
-    let cpu = &mut computer.cpu;
-
-    while usize::from(cpu.pc) < memory.len() {
-        let instruction = lb(memory, cpu);
-        let instruction = usize::from(instruction);
-        let instruction = Instruction::from_repr(instruction);
-        let instruction = instruction.unwrap_or_default();
-        cpu.process_instruction(instruction, memory);
-    }
 }
 
 fn main() {
@@ -167,13 +169,13 @@ fn main() {
         memory: [0; MEMORY_SIZE],
     };
 
-    let program = load_program(&mut computer);
-    program.unwrap(); // verify that program loaded
+    // NOTE: verifies that program loaded
+    computer.load_program().unwrap();
 
     println!("BEFORE: 0600: {:?}", &computer.memory[600..616]);
     println!("BEFORE: 0016: {:?}", &computer.memory[16..32]);
 
-    run_program(&mut computer);
+    computer.run_program();
     println!("AFTER : 0016: {:?}", &computer.memory[16..32]);
 }
 
