@@ -7,35 +7,40 @@ use std::io::prelude::*;
 use std::io::{self, BufReader};
 
 /// Type for storing CPU registers
+#[derive(Copy, Clone)]
 struct Registers {
-    a: Option<usize>,
-    x: Option<usize>,
-    y: Option<usize>,
-    z: Option<usize>,
-    pc: Option<usize>,
+    a: u8,
+    x: u8,
+    y: u8,
+    z: u8,
+    pc: u16,
 }
+
+impl Registers {
+    /// steps pc to next position
+    fn step(&mut self) {
+        self.pc = self.pc + 1;
+    }
+}
+
+// enum Instruction {
+//     0xa2
+// }
 
 /// loads instruction at address of pc, increments pc
-fn lb(memory: &mut [u8], pc: usize) -> (u8, usize) {
-    (memory[pc], pc+1)
+fn lb(memory: &[u8], registers: &mut Registers) -> u8 {
+    let index = registers.pc;
+    registers.step();
+    memory[index as usize]
 }
 
-fn main() -> io::Result<()> {
-    let mut registers = Registers {
-        a: Some(0),
-        x: Some(0),
-        y: Some(0),
-        z: Some(0),
-        pc: None,
-    };
-
-    // initialize memory array to all zeroes
-    let mut memory: [u8; 1000] = [0; 1000];
-    // memory[16] = 2;
-
+fn load_program(memory: &mut [u8], registers: &mut Registers) -> io::Result<()> {
+    // Load file contents into a buffer
     let f = File::open("countdown.txt")?;
     let f = BufReader::new(f);
 
+    // Iterate through each line in file
+    // Currently only supports one line
     for line in f.lines() {
         let line = line?;
         let hexdump: Vec<&str> = line.split(' ').collect();
@@ -43,27 +48,113 @@ fn main() -> io::Result<()> {
         // Identify location of code in memory
         let loc_length = hexdump[0].chars().count();
         let loc = &hexdump[0][0..loc_length - 1];
-        let mut loc: usize = loc.parse().unwrap();
-        if registers.pc == None {
-            registers.pc = Some(loc as i32);
+        let mut loc: u16 = loc.parse().unwrap();
+
+        if registers.pc == 0 {
+            registers.pc = loc;
         };
 
         // Write instructions to memory
-        println!("LINE : {}",registers.pc.unwrap());
+        println!("LINE : {}", registers.pc);
         for hex in &hexdump[1..] {
-            println!("{} || {:b}", hex, u8::from_str_radix(hex, 16).unwrap());
-            memory[loc] = u8::from_str_radix(hex, 16).unwrap();
-            loc+=1;
+            // println!("{} || {:b}", hex, u8::from_str_radix(hex, 16).unwrap());
+            memory[usize::from(loc)] = u8::from_str_radix(hex, 16).unwrap();
+            loc += 1;
         }
-
-        // Inspect memory
-        println!("0600: {:?}", &memory[600..616]);
-        println!("0010: {:?}", &memory[16..32]);
     }
 
     Ok(())
+}
 
-    // another_function();
+fn run_program(memory: &mut [u8], mut registers: Registers) -> Registers {
+    while registers.pc < 1000 {
+        let instruction = lb(&memory, &mut registers);
+        match instruction {
+            // LDX #
+            0xa2 => {
+                let new_x = lb(&memory, &mut registers);
+                registers.x = new_x;
+            }
+            // LDY #
+            0xa0 => {
+                let new_y = lb(&memory, &mut registers);
+                registers.y = new_y;
+            }
+            // STY zpg,X
+            0x94 => {
+                let zpg = lb(&memory, &mut registers);
+                memory[usize::from(zpg + registers.x)] = registers.y;
+            }
+            // INX impl
+            0xe8 => {
+                registers.x += 1;
+            }
+            // DEY impl
+            0x88 => {
+                registers.y -= 1;
+            }
+            // CPY #
+            0xc0 => {
+                let test_val = lb(&memory, &mut registers);
+                if registers.y == test_val {
+                    registers.z = 1;
+                } else {
+                    registers.z = 0;
+                }
+            }
+            // BNE rel
+            0xd0 => {
+                let offset: u8 = lb(&memory, &mut registers);
+                let offset: i8 = offset as i8;
+                let mut negative = false;
+                if offset.is_negative() {
+                    negative = true;
+                }
+                let offset = offset.abs();
+                let offset = offset as u16;
+                if registers.z == 0 && negative == false {
+                    registers.pc += u16::from(offset);
+                } else if registers.z == 0 && negative == true {
+                    registers.pc -= u16::from(offset);
+                }
+            }
+            0x00 => {
+                ()
+            }
+
+            _ => panic!("Unexpected instruction {} at position {} in memory", instruction, registers.pc)
+            // _ => (),
+        }
+        // println!("Register PC: {}", registers.pc);
+        // println!("Instruction: {}", instruction);
+    }
+    // println!("Register PC: {}", registers.pc.unwrap());
+
+    registers
+}
+
+fn main() {
+    let mut registers = Registers {
+        a: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+        pc: 0,
+    };
+
+    // initialize memory array to all zeroes
+    let mut memory: [u8; 1000] = [0; 1000];
+
+    let program = load_program(&mut memory, &mut registers);
+    program.unwrap(); // verify that program loaded
+
+    println!("0600: {:?}", &memory[600..616]);
+    println!("0016: {:?}", &memory[16..32]);
+
+    let registers = run_program(&mut memory, registers);
+    println!("Register x after run_program: {}", registers.x);
+
+    println!("0016: {:?}", &memory[16..32]);
 }
 
 // enums3.rs
