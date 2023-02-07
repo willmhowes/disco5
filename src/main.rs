@@ -6,9 +6,20 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
 
-/// Type for storing CPU registers
+/// Enum for each 6502 instruction
+enum Instruction {
+    i0xa2,
+    i0xa0,
+    i0x94,
+    i0xe8,
+    i0x88,
+    i0xc0,
+    i0xd0,
+}
+
+/// Type for storing MPU (micoroprocessor) fields
 #[derive(Copy, Clone)]
-struct Registers {
+struct MPU {
     a: u8,
     x: u8,
     y: u8,
@@ -16,25 +27,68 @@ struct Registers {
     pc: u16,
 }
 
-impl Registers {
+impl MPU {
     /// steps pc to next position
     fn step(&mut self) {
         self.pc = self.pc + 1;
     }
+
+    /// processors 6502 instruction using enum Instruction
+    fn process_instruction(&mut self, instruction: Instruction, memory: &mut [u8]) {
+        match instruction {
+            Instruction::i0xa2 => {
+                let new_x = lb(memory, self);
+                self.x = new_x;
+            }
+            Instruction::i0xa0 => {
+                let new_y = lb(memory, self);
+                self.y = new_y;
+            }
+            Instruction::i0x94 => {
+                let zpg = lb(memory, self);
+                memory[usize::from(zpg + self.x)] = self.y;
+            }
+            Instruction::i0xe8 => {
+                self.x += 1;
+            }
+            Instruction::i0x88 => {
+                self.y -= 1;
+            }
+            Instruction::i0xc0 => {
+                let test_val = lb(memory, self);
+                if self.y == test_val {
+                    self.z = 1;
+                } else {
+                    self.z = 0;
+                }
+            }
+            Instruction::i0xd0 => {
+                let offset: u8 = lb(memory, self);
+                let offset: i8 = offset as i8;
+                let mut negative = false;
+                if offset.is_negative() {
+                    negative = true;
+                }
+                let offset = offset.abs();
+                let offset = offset as u16;
+                if self.z == 0 && negative == false {
+                    self.pc += u16::from(offset);
+                } else if self.z == 0 && negative == true {
+                    self.pc -= u16::from(offset);
+                }
+            }
+        }
+    }
 }
 
-// enum Instruction {
-//     0xa2
-// }
-
 /// loads instruction at address of pc, increments pc
-fn lb(memory: &[u8], registers: &mut Registers) -> u8 {
-    let index = registers.pc;
-    registers.step();
+fn lb(memory: &[u8], mpu: &mut MPU) -> u8 {
+    let index = mpu.pc;
+    mpu.step();
     memory[index as usize]
 }
 
-fn load_program(memory: &mut [u8], registers: &mut Registers) -> io::Result<()> {
+fn load_program(memory: &mut [u8], mpu: &mut MPU) -> io::Result<()> {
     // Load file contents into a buffer
     let f = File::open("countdown.txt")?;
     let f = BufReader::new(f);
@@ -50,12 +104,12 @@ fn load_program(memory: &mut [u8], registers: &mut Registers) -> io::Result<()> 
         let loc = &hexdump[0][0..loc_length - 1];
         let mut loc: u16 = loc.parse().unwrap();
 
-        if registers.pc == 0 {
-            registers.pc = loc;
+        if mpu.pc == 0 {
+            mpu.pc = loc;
         };
 
         // Write instructions to memory
-        println!("LINE : {}", registers.pc);
+        println!("LINE : {}", mpu.pc);
         for hex in &hexdump[1..] {
             // println!("{} || {:b}", hex, u8::from_str_radix(hex, 16).unwrap());
             memory[usize::from(loc)] = u8::from_str_radix(hex, 16).unwrap();
@@ -66,75 +120,52 @@ fn load_program(memory: &mut [u8], registers: &mut Registers) -> io::Result<()> 
     Ok(())
 }
 
-fn run_program(memory: &mut [u8], mut registers: Registers) -> Registers {
-    while registers.pc < 1000 {
-        let instruction = lb(&memory, &mut registers);
+fn run_program(memory: &mut [u8], mut mpu: MPU) -> MPU {
+    while usize::from(mpu.pc) < memory.len() {
+        let instruction = lb(&memory, &mut mpu);
         match instruction {
             // LDX #
             0xa2 => {
-                let new_x = lb(&memory, &mut registers);
-                registers.x = new_x;
+                mpu.process_instruction(Instruction::i0xa2, memory);
             }
             // LDY #
             0xa0 => {
-                let new_y = lb(&memory, &mut registers);
-                registers.y = new_y;
+                mpu.process_instruction(Instruction::i0xa0, memory);
             }
             // STY zpg,X
             0x94 => {
-                let zpg = lb(&memory, &mut registers);
-                memory[usize::from(zpg + registers.x)] = registers.y;
+                mpu.process_instruction(Instruction::i0x94, memory);
             }
             // INX impl
             0xe8 => {
-                registers.x += 1;
+                mpu.process_instruction(Instruction::i0xe8, memory);
             }
             // DEY impl
             0x88 => {
-                registers.y -= 1;
+                mpu.process_instruction(Instruction::i0x88, memory);
             }
             // CPY #
             0xc0 => {
-                let test_val = lb(&memory, &mut registers);
-                if registers.y == test_val {
-                    registers.z = 1;
-                } else {
-                    registers.z = 0;
-                }
+                mpu.process_instruction(Instruction::i0xc0, memory);
             }
             // BNE rel
             0xd0 => {
-                let offset: u8 = lb(&memory, &mut registers);
-                let offset: i8 = offset as i8;
-                let mut negative = false;
-                if offset.is_negative() {
-                    negative = true;
-                }
-                let offset = offset.abs();
-                let offset = offset as u16;
-                if registers.z == 0 && negative == false {
-                    registers.pc += u16::from(offset);
-                } else if registers.z == 0 && negative == true {
-                    registers.pc -= u16::from(offset);
-                }
+                mpu.process_instruction(Instruction::i0xd0, memory);
             }
-            0x00 => {
-                ()
-            }
-
-            _ => panic!("Unexpected instruction {} at position {} in memory", instruction, registers.pc)
+            0x00 => (),
+            _ => panic!(
+                "Unexpected instruction {} at position {} in memory",
+                instruction, mpu.pc
+            ),
             // _ => (),
         }
-        // println!("Register PC: {}", registers.pc);
-        // println!("Instruction: {}", instruction);
     }
-    // println!("Register PC: {}", registers.pc.unwrap());
 
-    registers
+    mpu
 }
 
 fn main() {
-    let mut registers = Registers {
+    let mut mpu = MPU {
         a: 0,
         x: 0,
         y: 0,
@@ -145,14 +176,14 @@ fn main() {
     // initialize memory array to all zeroes
     let mut memory: [u8; 1000] = [0; 1000];
 
-    let program = load_program(&mut memory, &mut registers);
+    let program = load_program(&mut memory, &mut mpu);
     program.unwrap(); // verify that program loaded
 
     println!("0600: {:?}", &memory[600..616]);
     println!("0016: {:?}", &memory[16..32]);
 
-    let registers = run_program(&mut memory, registers);
-    println!("Register x after run_program: {}", registers.x);
+    let mpu = run_program(&mut memory, mpu);
+    println!("Register x after run_program: {}", mpu.x);
 
     println!("0016: {:?}", &memory[16..32]);
 }
@@ -196,13 +227,13 @@ fn main() {
 //         self.position = p;
 //     }
 
-//     fn process(&mut self, message: Message) {
-//         match message {
-//             Message::ChangeColor((x,y,z)) => self.change_color((x,y,z)),
-//             Message::Echo(s) => self.echo(s),
-//             Message::Move(p) => self.move_position(p),
-//             Message::Quit => self.quit(),
-//         }
+// fn process(&mut self, message: Message) {
+//     match message {
+//         Message::ChangeColor((x,y,z)) => self.change_color((x,y,z)),
+//         Message::Echo(s) => self.echo(s),
+//         Message::Move(p) => self.move_position(p),
+//         Message::Quit => self.quit(),
+//     }
 //     }
 // }
 
