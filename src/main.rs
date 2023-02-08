@@ -29,7 +29,7 @@ enum Instruction {
     I0xd0 = 0xd0,
     /// invalid instruction catch-all
     #[default]
-    Invalid = 0x100,
+    Invalid = 0x100, // larger than any possible 6502 instruction
 }
 
 /// Type for storing CPU fields
@@ -144,9 +144,9 @@ impl Computer {
             }
             Instruction::I0x88 => {
                 self.cpu.y -= 1;
-                // if self.cpu.y == 0 {
-                //     self.flags.z = true;
-                // }
+                if self.cpu.y == 0 {
+                    self.flags.z = true;
+                }
             }
             Instruction::I0xc0 => {
                 let test_val = lb(&self.memory, &mut self.cpu);
