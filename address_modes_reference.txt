@@ -1,0 +1,13 @@
+A = Accumulator
+abs	= absolute
+abs,X = absolute, X-indexed
+abs,Y = absolute, Y-indexed
+# = immediate
+impl = implied
+ind = indirect
+X,ind = X-indexed, indirect
+ind,Y = indirect, Y-indexed
+rel = relative
+zpg = zeropage
+zpg,X = zeropage, X-indexed
+zpg,Y = zeropage, Y-indexed
