@@ -1,3 +1,4 @@
+#[allow(non_camel_case_types)]
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
@@ -19,7 +20,7 @@ enum Instruction {
     DEYimpl = 0x88,
     CPYimm = 0xc0,
     BNErel = 0xd0,
-    /// invalid instruction catch-all
+    /// catch-all invalid instruction
     #[default]
     Invalid = 0x100, // larger than any possible 6502 instruction
 }
@@ -30,7 +31,6 @@ fn lb(memory: &[u8], cpu: &mut CPU) -> u8 {
     cpu.step();
     memory[index as usize]
 }
-
 
 pub struct Computer {
     pub cpu: CPU,
@@ -147,13 +147,13 @@ impl Computer {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
-    fn test_instruction_LDXimm() {
+    fn test_ldx_imm() {
         let mut computer: Computer = Default::default();
 
         computer.memory[0] = 5;
@@ -167,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn test_instruction_LDYimm() {
+    fn test_ldy_imm() {
         let mut computer: Computer = Default::default();
         computer.memory[0] = 5;
         computer.process_instruction(Instruction::LDYimm);
@@ -180,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    fn test_instruction_STYzpgx() {
+    fn test_sty_zpgx() {
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0x05;
         computer.cpu.x = 0x00;
@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn test_instruction_INXimpl() {
+    fn test_inx_impl() {
         let mut computer: Computer = Default::default();
         computer.cpu.x = 0x00;
         let original_x = computer.cpu.x;
@@ -214,7 +214,7 @@ mod tests {
 
     // TODO: implement flags and improve test
     #[test]
-    fn test_instruction_DEYimpl() {
+    fn test_dey_impl() {
         let mut computer: Computer = Default::default();
         computer.cpu.y = 0x01;
         let original_y = computer.cpu.y;
@@ -229,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn test_instruction_CPYimm() {
+    fn test_cpy_imm() {
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xa1;
         computer.cpu.y = 0xa1;
@@ -241,5 +241,24 @@ mod tests {
         computer.cpu.y = 0xa1;
         computer.process_instruction(Instruction::CPYimm);
         assert_eq!(computer.cpu.status.z, false);
+    }
+
+    #[test]
+    fn test_bne_rel() {
+        // backward jump
+        let mut computer: Computer = Default::default();
+        computer.memory[10] = 0xf5;
+        computer.cpu.pc = 10;
+        computer.memory[0] = 0xaa;
+        computer.process_instruction(Instruction::BNErel);
+        assert_eq!(lb(&computer.memory, &mut computer.cpu), 0xaa);
+
+        // forward jump
+        let mut computer: Computer = Default::default();
+        computer.memory[10] = 0x04;
+        computer.cpu.pc = 10;
+        computer.memory[15] = 0xaa;
+        computer.process_instruction(Instruction::BNErel);
+        assert_eq!(lb(&computer.memory, &mut computer.cpu), 0xaa);
     }
 }
