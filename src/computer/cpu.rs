@@ -1,5 +1,5 @@
 /// Type for storing CPU registers as fields
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct CPU {
     /// accumulator register
     pub a: u8,
@@ -16,7 +16,7 @@ pub struct CPU {
 }
 
 /// Type for storing the flags of the status register as fields
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct StatusRegister {
     /// negative flag
     pub n: bool,
