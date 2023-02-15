@@ -13,6 +13,7 @@ const MEMORY_SIZE: usize = 0xffff;
 /// Enum for each 6502 instruction
 #[derive(Debug, FromRepr, Default)]
 enum Instruction {
+    // ADCimm = 0x69,
     LDXimm = 0xa2,
     LDYimm = 0xa0,
     STYzpgx = 0x94,
@@ -95,61 +96,45 @@ impl Computer {
         }
     }
 
+    fn set_status_nz(&mut self, test_val: u8) {
+        self.cpu.status.z = if test_val == 0 { true } else { false };
+        // 0x80 = 0b1000_0000
+        self.cpu.status.n = if test_val & 0x80 == 0x80 { true } else { false };
+    }
+
     /// processes 6502 instructions stored in enum data type Instruction
     fn process_instruction(&mut self, instruction: Instruction) {
         match instruction {
+            // Instruction::ADCimm => {
+            //     let addend = lb(&self.memory, &mut self.cpu);
+
+            // }
             Instruction::LDXimm => {
                 self.cpu.x = lb(&self.memory, &mut self.cpu);
-                self.cpu.status.z = if self.cpu.x == 0 { true } else { false };
-                // if self.cpu.x >= 128, then bit 7 of binary representation is 1
-                self.cpu.status.n = if self.cpu.x & 0x80 == 0x80 { true } else { false };
+                self.set_status_nz(self.cpu.x);
             }
             Instruction::LDYimm => {
                 self.cpu.y = lb(&self.memory, &mut self.cpu);
-                self.cpu.status.z = if self.cpu.y == 0 { true } else { false };
-                // if self.cpu.y > 127, then bit 7 of binary representation is 1
-                self.cpu.status.n = if self.cpu.y > 127 { true } else { false };
+                self.set_status_nz(self.cpu.y);
             }
             Instruction::STYzpgx => {
-                let zpg = usize::from(lb(&self.memory, &mut self.cpu));
-                let x = usize::from(self.cpu.x);
-                self.memory[(zpg + x) % 256] = self.cpu.y;
+                let zpg = lb(&self.memory, &mut self.cpu);
+                let index = zpg.wrapping_add(self.cpu.x);
+                let index: usize = usize::from(index);
+                self.memory[index] = self.cpu.y;
             }
             Instruction::INXimpl => {
-                self.cpu.x = if self.cpu.x == 0xff {
-                    0
-                } else {
-                    self.cpu.x + 1
-                };
-                self.cpu.status.z = if self.cpu.x == 0 { true } else { false };
-                // if self.cpu.x > 127, then bit 7 of binary representation is 1
-                self.cpu.status.n = if self.cpu.x > 127 { true } else { false };
+                self.cpu.x = self.cpu.x.wrapping_add(1);
+                self.set_status_nz(self.cpu.x);
             }
             Instruction::DEYimpl => {
-                self.cpu.y = if self.cpu.y == 0x00 {
-                    0xff
-                } else {
-                    self.cpu.y - 1
-                };
-                self.cpu.status.z = if self.cpu.x == 0 { true } else { false };
-                // if self.cpu.y > 127, then bit 7 of binary representation is 1
-                self.cpu.status.n = if self.cpu.x > 127 { true } else { false };
+                self.cpu.y = self.cpu.y.wrapping_sub(1);
+                self.set_status_nz(self.cpu.y);
             }
             Instruction::CPYimm => {
                 let test_val = lb(&self.memory, &mut self.cpu);
                 self.cpu.status.c = if self.cpu.y >= test_val { true } else { false };
-                self.cpu.status.z = if self.cpu.y == test_val { true } else { false };
-                // 6502 utilizes modulu subtraction in the event of an underflow
-                // based on experiments run in the visual6502 emulator
-                // TODO: implement better solution for overflow
-                self.cpu.status.n = if (i16::from(self.cpu.y) - i16::from(test_val) % 256) > 127 {
-                    true
-                } else {
-                    false
-                };
-
-                println!("testval: {}", test_val);
-                println!("{:?}", self.cpu);
+                self.set_status_nz(self.cpu.y.wrapping_sub(test_val));
             }
             Instruction::BNErel => {
                 let offset: u8 = lb(&self.memory, &mut self.cpu);
@@ -179,15 +164,24 @@ mod tests {
     #[test]
     fn test_ldx_imm() {
         let mut computer: Computer = Default::default();
-
         computer.memory[0] = 5;
         computer.process_instruction(Instruction::LDXimm);
         assert_eq!(computer.cpu.x, 5);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xf4;
         computer.process_instruction(Instruction::LDXimm);
         assert_eq!(computer.cpu.x, 0xf4);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, true);
+
+        let mut computer: Computer = Default::default();
+        computer.process_instruction(Instruction::LDXimm);
+        assert_eq!(computer.cpu.x, 0x00);
+        assert_eq!(computer.cpu.status.z, true);
+        assert_eq!(computer.cpu.status.n, false);
     }
 
     #[test]
@@ -196,11 +190,21 @@ mod tests {
         computer.memory[0] = 5;
         computer.process_instruction(Instruction::LDYimm);
         assert_eq!(computer.cpu.y, 5);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xf4;
         computer.process_instruction(Instruction::LDYimm);
         assert_eq!(computer.cpu.y, 244);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, true);
+
+        let mut computer: Computer = Default::default();
+        computer.process_instruction(Instruction::LDYimm);
+        assert_eq!(computer.cpu.x, 0x00);
+        assert_eq!(computer.cpu.status.z, true);
+        assert_eq!(computer.cpu.status.n, false);
     }
 
     #[test]
@@ -228,11 +232,23 @@ mod tests {
         let original_x = computer.cpu.x;
         computer.process_instruction(Instruction::INXimpl);
         assert_eq!(computer.cpu.x, original_x + 1);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.z, false);
+
+        let mut computer: Computer = Default::default();
+        computer.cpu.x = 0xf0;
+        let original_x = computer.cpu.x;
+        computer.process_instruction(Instruction::INXimpl);
+        assert_eq!(computer.cpu.x, original_x + 1);
+        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.status.z, false);
 
         let mut computer: Computer = Default::default();
         computer.cpu.x = 0xff;
         computer.process_instruction(Instruction::INXimpl);
         assert_eq!(computer.cpu.x, 0);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.z, true);
     }
 
     // TODO: implement flags and improve test
@@ -243,12 +259,23 @@ mod tests {
         let original_y = computer.cpu.y;
         computer.process_instruction(Instruction::DEYimpl);
         assert_eq!(computer.cpu.y, original_y - 1);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.z, true);
 
         let mut computer: Computer = Default::default();
-        computer.cpu.y = 0xb8;
+        computer.cpu.y = 0x18;
         let original_y = computer.cpu.y;
         computer.process_instruction(Instruction::DEYimpl);
         assert_eq!(computer.cpu.y, original_y - 1);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.z, false);
+
+        let mut computer: Computer = Default::default();
+        computer.cpu.y = 0x00;
+        computer.process_instruction(Instruction::DEYimpl);
+        assert_eq!(computer.cpu.y, 0xff);
+        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.status.z, false);
     }
 
     #[test]
@@ -257,13 +284,33 @@ mod tests {
         computer.memory[0] = 0xa1;
         computer.cpu.y = 0xa1;
         computer.process_instruction(Instruction::CPYimm);
+        assert_eq!(computer.cpu.status.n, false);
         assert_eq!(computer.cpu.status.z, true);
+        assert_eq!(computer.cpu.status.c, true);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xa1;
         computer.cpu.y = 0x10;
         computer.process_instruction(Instruction::CPYimm);
+        assert_eq!(computer.cpu.status.n, false);
         assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.c, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0x20;
+        computer.cpu.y = 0x10;
+        computer.process_instruction(Instruction::CPYimm);
+        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.c, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0x10;
+        computer.cpu.y = 0xa1;
+        computer.process_instruction(Instruction::CPYimm);
+        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.c, true);
     }
 
     #[test]
