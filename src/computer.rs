@@ -110,27 +110,29 @@ impl Computer {
         self.cpu.status.n = if test_val & 0x80 == 0x80 { true } else { false };
     }
 
+    fn do_adc(&mut self, addend_2: u8) {
+        let addend_1 = self.cpu.a;
+        let carry = if self.cpu.status.c == true { 1 } else { 0 };
+        let result = addend_1.wrapping_add(addend_2).wrapping_add(carry);
+        self.cpu.a = result;
+        self.cpu.status.c = if addend_1 >= result { true } else { false };
+        self.cpu.status.v = if (addend_1 ^ result) & (addend_2 ^ result) & 0x80 == 0x00 {
+            false
+        } else {
+            true
+        };
+        self.set_status_nz(self.cpu.a);
+    }
+
     fn process_instruction(&mut self, instruction: Instruction) {
         match instruction {
             Instruction::ADCimm => {
-                let addend_1 = self.cpu.a;
                 let addend_2 = lb(&self.memory, &mut self.cpu);
-                let carry = if self.cpu.status.c == true { 1 } else { 0 };
-                let result = addend_1.wrapping_add(addend_2).wrapping_add(carry);
-                self.cpu.a = result;
-                self.cpu.status.c = if addend_1 >= result { true } else { false };
-                self.cpu.status.v = if (addend_1 ^ result) & (addend_2 ^ result) & 0x80 == 0x00 {
-                    false
-                } else {
-                    true
-                };
-                self.set_status_nz(self.cpu.a);
+                self.do_adc(addend_2);
             }
-            // THIS SUCKS
             Instruction::SBCimm => {
-                self.memory[self.cpu.pc as usize] = !self.memory[self.cpu.pc as usize];
-                self.process_instruction(Instruction::ADCimm);
-                self.memory[(self.cpu.pc - 1) as usize] = !self.memory[(self.cpu.pc - 1) as usize];
+                let addend_2 = !lb(&self.memory, &mut self.cpu);
+                self.do_adc(addend_2);
             }
             Instruction::LDXimm => {
                 self.cpu.x = lb(&self.memory, &mut self.cpu);
@@ -252,17 +254,6 @@ mod tests {
     fn test_sbc_imm() {
         let mut computer: Computer = Default::default();
         computer.memory[0] = 6;
-        computer.cpu.a = 10;
-        computer.cpu.status.c = true;
-        computer.process_instruction(Instruction::SBCimm);
-        assert_eq!(computer.cpu.a, 4);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.c, true);
-        assert_eq!(computer.cpu.status.v, false);
-
-        // testing to ensure program remains unchanged after SBCimm
-        computer.cpu.pc = 0;
         computer.cpu.a = 10;
         computer.cpu.status.c = true;
         computer.process_instruction(Instruction::SBCimm);
