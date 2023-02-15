@@ -13,7 +13,14 @@ const MEMORY_SIZE: usize = 0xffff;
 /// Enum for each 6502 instruction
 #[derive(Debug, FromRepr, Default)]
 enum Instruction {
+    // ADCabsx = 0x7d,
+    // ADCabsy = 0x79,
     ADCimm = 0x69,
+    // ADCindx = 0x61,
+    // ADCindy = 0x71,
+    // ADCabs = 0x6d,
+    // ADCzpg = 0x65,
+    // ADCzpgx = 0x75,
     SBCimm = 0xe9,
     LDXimm = 0xa2,
     LDYimm = 0xa0,
@@ -108,12 +115,10 @@ impl Computer {
             Instruction::ADCimm => {
                 let addend_1 = self.cpu.a;
                 let addend_2 = lb(&self.memory, &mut self.cpu);
-                let mut result = addend_1.wrapping_add(addend_2);
-                if self.cpu.status.c == true {
-                    result = result.wrapping_add(1);
-                }
-                self.cpu.status.c = if addend_1 >= result { true } else { false };
+                let carry = if self.cpu.status.c == true { 1 } else { 0 };
+                let result = addend_1.wrapping_add(addend_2).wrapping_add(carry);
                 self.cpu.a = result;
+                self.cpu.status.c = if addend_1 >= result { true } else { false };
                 self.cpu.status.v = if (addend_1 ^ result) & (addend_2 ^ result) & 0x80 == 0x00 {
                     false
                 } else {
@@ -121,6 +126,7 @@ impl Computer {
                 };
                 self.set_status_nz(self.cpu.a);
             }
+            // THIS SUCKS
             Instruction::SBCimm => {
                 self.memory[self.cpu.pc as usize] = !self.memory[self.cpu.pc as usize];
                 self.process_instruction(Instruction::ADCimm);
@@ -246,6 +252,17 @@ mod tests {
     fn test_sbc_imm() {
         let mut computer: Computer = Default::default();
         computer.memory[0] = 6;
+        computer.cpu.a = 10;
+        computer.cpu.status.c = true;
+        computer.process_instruction(Instruction::SBCimm);
+        assert_eq!(computer.cpu.a, 4);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.status.v, false);
+
+        // testing to ensure program remains unchanged after SBCimm
+        computer.cpu.pc = 0;
         computer.cpu.a = 10;
         computer.cpu.status.c = true;
         computer.process_instruction(Instruction::SBCimm);
