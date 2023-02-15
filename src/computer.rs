@@ -35,7 +35,7 @@ enum Instruction {
 }
 
 /// loads instruction at address of pc, increments pc
-fn lb(memory: &[u8], cpu: &mut CPU) -> u8 {
+fn fetch_instruction(memory: &[u8], cpu: &mut CPU) -> u8 {
     let index = cpu.pc;
     cpu.step();
     memory[index as usize]
@@ -96,7 +96,7 @@ impl Computer {
 
     pub fn run_program(&mut self) {
         while usize::from(self.cpu.pc) < self.memory.len() {
-            let instruction = lb(&self.memory, &mut self.cpu);
+            let instruction = fetch_instruction(&self.memory, &mut self.cpu);
             let instruction = usize::from(instruction);
             let instruction = Instruction::from_repr(instruction);
             let instruction = instruction.unwrap_or_default();
@@ -127,23 +127,23 @@ impl Computer {
     fn process_instruction(&mut self, instruction: Instruction) {
         match instruction {
             Instruction::ADCimm => {
-                let addend_2 = lb(&self.memory, &mut self.cpu);
+                let addend_2 = fetch_instruction(&self.memory, &mut self.cpu);
                 self.do_adc(addend_2);
             }
             Instruction::SBCimm => {
-                let addend_2 = !lb(&self.memory, &mut self.cpu);
+                let addend_2 = !fetch_instruction(&self.memory, &mut self.cpu);
                 self.do_adc(addend_2);
             }
             Instruction::LDXimm => {
-                self.cpu.x = lb(&self.memory, &mut self.cpu);
+                self.cpu.x = fetch_instruction(&self.memory, &mut self.cpu);
                 self.set_status_nz(self.cpu.x);
             }
             Instruction::LDYimm => {
-                self.cpu.y = lb(&self.memory, &mut self.cpu);
+                self.cpu.y = fetch_instruction(&self.memory, &mut self.cpu);
                 self.set_status_nz(self.cpu.y);
             }
             Instruction::STYzpgx => {
-                let zpg = lb(&self.memory, &mut self.cpu);
+                let zpg = fetch_instruction(&self.memory, &mut self.cpu);
                 let index = zpg.wrapping_add(self.cpu.x);
                 let index: usize = usize::from(index);
                 self.memory[index] = self.cpu.y;
@@ -157,12 +157,12 @@ impl Computer {
                 self.set_status_nz(self.cpu.y);
             }
             Instruction::CPYimm => {
-                let test_val = lb(&self.memory, &mut self.cpu);
+                let test_val = fetch_instruction(&self.memory, &mut self.cpu);
                 self.cpu.status.c = if self.cpu.y >= test_val { true } else { false };
                 self.set_status_nz(self.cpu.y.wrapping_sub(test_val));
             }
             Instruction::BNErel => {
-                let offset: u8 = lb(&self.memory, &mut self.cpu);
+                let offset: u8 = fetch_instruction(&self.memory, &mut self.cpu);
                 let offset: i8 = offset as i8;
                 let mut negative = false;
                 if offset.is_negative() {
@@ -468,7 +468,7 @@ mod tests {
         computer.cpu.pc = 10;
         computer.memory[0] = 0xaa;
         computer.process_instruction(Instruction::BNErel);
-        assert_eq!(lb(&computer.memory, &mut computer.cpu), 0xaa);
+        assert_eq!(fetch_instruction(&computer.memory, &mut computer.cpu), 0xaa);
 
         // forward jump
         let mut computer: Computer = Default::default();
@@ -476,6 +476,6 @@ mod tests {
         computer.cpu.pc = 10;
         computer.memory[15] = 0xaa;
         computer.process_instruction(Instruction::BNErel);
-        assert_eq!(lb(&computer.memory, &mut computer.cpu), 0xaa);
+        assert_eq!(fetch_instruction(&computer.memory, &mut computer.cpu), 0xaa);
     }
 }
