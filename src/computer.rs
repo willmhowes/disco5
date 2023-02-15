@@ -13,7 +13,8 @@ const MEMORY_SIZE: usize = 0xffff;
 /// Enum for each 6502 instruction
 #[derive(Debug, FromRepr, Default)]
 enum Instruction {
-    // ADCimm = 0x69,
+    ADCimm = 0x69,
+    SBCimm = 0xe9,
     LDXimm = 0xa2,
     LDYimm = 0xa0,
     STYzpgx = 0x94,
@@ -98,17 +99,33 @@ impl Computer {
 
     fn set_status_nz(&mut self, test_val: u8) {
         self.cpu.status.z = if test_val == 0 { true } else { false };
-        // 0x80 = 0b1000_0000
+        // 0x80 = 0b1000_0000 (i.e. a negative number under two-complement encoding)
         self.cpu.status.n = if test_val & 0x80 == 0x80 { true } else { false };
     }
 
-    /// processes 6502 instructions stored in enum data type Instruction
     fn process_instruction(&mut self, instruction: Instruction) {
         match instruction {
-            // Instruction::ADCimm => {
-            //     let addend = lb(&self.memory, &mut self.cpu);
-
-            // }
+            Instruction::ADCimm => {
+                let addend_1 = self.cpu.a;
+                let addend_2 = lb(&self.memory, &mut self.cpu);
+                let mut result = addend_1.wrapping_add(addend_2);
+                if self.cpu.status.c == true {
+                    result = result.wrapping_add(1);
+                }
+                self.cpu.status.c = if addend_1 >= result { true } else { false };
+                self.cpu.a = result;
+                self.cpu.status.v = if (addend_1 ^ result) & (addend_2 ^ result) & 0x80 == 0x00 {
+                    false
+                } else {
+                    true
+                };
+                self.set_status_nz(self.cpu.a);
+            }
+            Instruction::SBCimm => {
+                self.memory[self.cpu.pc as usize] = !self.memory[self.cpu.pc as usize];
+                self.process_instruction(Instruction::ADCimm);
+                self.memory[(self.cpu.pc - 1) as usize] = !self.memory[(self.cpu.pc - 1) as usize];
+            }
             Instruction::LDXimm => {
                 self.cpu.x = lb(&self.memory, &mut self.cpu);
                 self.set_status_nz(self.cpu.x);
@@ -160,6 +177,128 @@ impl Computer {
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn test_adc_imm() {
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0x0a;
+        computer.cpu.a = 0x05;
+        computer.cpu.status.c = true;
+        computer.process_instruction(Instruction::ADCimm);
+        assert_eq!(computer.cpu.a, 0x10);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.c, false);
+        assert_eq!(computer.cpu.status.v, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0xff;
+        computer.cpu.a = 0x10;
+        computer.process_instruction(Instruction::ADCimm);
+        assert_eq!(computer.cpu.a, 0x0f);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.status.v, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0xff;
+        computer.cpu.a = 0x01;
+        computer.process_instruction(Instruction::ADCimm);
+        assert_eq!(computer.cpu.a, 0x00);
+        assert_eq!(computer.cpu.status.z, true);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.status.v, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0xa0;
+        computer.cpu.a = 0x05;
+        computer.process_instruction(Instruction::ADCimm);
+        assert_eq!(computer.cpu.a, 0xa5);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.status.c, false);
+        assert_eq!(computer.cpu.status.v, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0x9c;
+        computer.cpu.a = 0x9c;
+        computer.process_instruction(Instruction::ADCimm);
+        assert_eq!(computer.cpu.a, 0x38);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.status.v, true);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0x50;
+        computer.cpu.a = 0x50;
+        computer.process_instruction(Instruction::ADCimm);
+        assert_eq!(computer.cpu.a, 0xa0);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.status.c, false);
+        assert_eq!(computer.cpu.status.v, true);
+    }
+
+    #[test]
+    fn test_sbc_imm() {
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 6;
+        computer.cpu.a = 10;
+        computer.cpu.status.c = true;
+        computer.process_instruction(Instruction::SBCimm);
+        assert_eq!(computer.cpu.a, 4);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.status.v, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0x10;
+        computer.cpu.a = 0xff;
+        computer.cpu.status.c = false;
+        computer.process_instruction(Instruction::SBCimm);
+        assert_eq!(computer.cpu.a, 0xee);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.status.v, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0xff;
+        computer.cpu.a = 0xff;
+        computer.cpu.status.c = true;
+        computer.process_instruction(Instruction::SBCimm);
+        assert_eq!(computer.cpu.a, 0x00);
+        assert_eq!(computer.cpu.status.z, true);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.status.v, false);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0xb0;
+        computer.cpu.a = 0x50;
+        computer.cpu.status.c = true;
+        computer.process_instruction(Instruction::SBCimm);
+        assert_eq!(computer.cpu.a, 0xa0);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.status.c, false);
+        assert_eq!(computer.cpu.status.v, true);
+
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0x70;
+        computer.cpu.a = 0xd0;
+        computer.cpu.status.c = true;
+        computer.process_instruction(Instruction::SBCimm);
+        assert_eq!(computer.cpu.a, 0x60);
+        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.status.v, true);
+    }
 
     #[test]
     fn test_ldx_imm() {
