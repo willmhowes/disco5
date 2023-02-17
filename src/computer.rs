@@ -2,17 +2,17 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
-use std::ops::Add;
-use strum_macros::FromRepr;
 
 pub mod cpu;
+pub mod opcode_map;
 
 use crate::computer::cpu::*;
+use crate::computer::opcode_map::map_byte_to_instruction;
 
 const MEMORY_SIZE: usize = 0xffff;
 
 #[derive(Debug, Copy, Clone)]
-enum AddressingMode {
+pub enum AddressingMode {
     Accumulator,
     Absolute,
     AbsoluteX,
@@ -29,7 +29,7 @@ enum AddressingMode {
 }
 
 #[derive(Debug, Default)]
-enum Instruction {
+pub enum Instruction {
     /// add with carry
     ADC(AddressingMode),
     /// and (with accumulator)
@@ -209,35 +209,8 @@ impl Computer {
     pub fn run_program(&mut self) {
         while usize::from(self.cpu.pc) < self.memory.len() {
             let instruction = fetch_instruction(&self.memory, &mut self.cpu);
-            let instruction = usize::from(instruction);
-            let instruction = match instruction {
-                0x6d => Instruction::ADC(AddressingMode::Absolute),
-                0x7d => Instruction::ADC(AddressingMode::AbsoluteX),
-                0x79 => Instruction::ADC(AddressingMode::AbsoluteY),
-                0x69 => Instruction::ADC(AddressingMode::Immediate),
-                0x61 => Instruction::ADC(AddressingMode::IndirectX),
-                0x71 => Instruction::ADC(AddressingMode::IndirectY),
-                0x65 => Instruction::ADC(AddressingMode::ZeroPage),
-                0x75 => Instruction::ADC(AddressingMode::ZeroPageX),
-
-                0xe9 => Instruction::SBC(AddressingMode::Immediate),
-
-                0xa2 => Instruction::LDX(AddressingMode::Immediate),
-
-                0xa0 => Instruction::LDY(AddressingMode::Immediate),
-
-                0x94 => Instruction::STY(AddressingMode::ZeroPageX),
-
-                0xe8 => Instruction::INX(AddressingMode::Implied),
-
-                0x88 => Instruction::DEY(AddressingMode::Implied),
-
-                0xc0 => Instruction::CPY(AddressingMode::Immediate),
-
-                0xd0 => Instruction::BNE(AddressingMode::Relative),
-
-                _ => Instruction::Invalid,
-            };
+            let instruction = map_byte_to_instruction(instruction);
+            println!("{:?}", instruction);
             self.process_instruction(instruction);
         }
     }
@@ -273,9 +246,48 @@ impl Computer {
             AddressingMode::Immediate | AddressingMode::Relative => {
                 Some(u16::from(fetch_instruction(&self.memory, &mut self.cpu)))
             }
-            AddressingMode::Indirect => todo!(),
-            AddressingMode::IndirectX => todo!(),
-            AddressingMode::IndirectY => todo!(),
+            AddressingMode::Indirect => {
+                let lo = fetch_instruction(&self.memory, &mut self.cpu);
+                let hi = fetch_instruction(&self.memory, &mut self.cpu);
+                let address = (u16::from(hi) << 2) + u16::from(lo);
+
+                let lo = self.memory[usize::from(address)];
+                // The indirect jump instruction does not increment the page
+                // address whenthe indirect pointer crosses a page boundary.
+                // JMP ($xxFF) will fetch the address from $xxFF and $xx00.
+                // https://www.pagetable.com/c64ref/6502/?tab=3
+                let address = if address & 0x00ff == 0x00ff {
+                    address & 0xff00
+                } else {
+                    address + 1
+                };
+                let hi = self.memory[usize::from(address)];
+                let address = (u16::from(hi) << 2) + u16::from(lo);
+                Some(address)
+            }
+            AddressingMode::IndirectX => {
+                let zpg = fetch_instruction(&self.memory, &mut self.cpu);
+                let lo = zpg.wrapping_add(self.cpu.x);
+                let hi: u8 = 0x00;
+                let address = (u16::from(hi) << 2) + u16::from(lo);
+
+                let lo = self.memory[usize::from(address)];
+                // IndirectX wraps around the zeropage
+                let hi = self.memory[usize::from(address + 1) % 256];
+                let address = (u16::from(hi) << 2) + u16::from(lo);
+                Some(address)
+            }
+            AddressingMode::IndirectY => {
+                let lo = fetch_instruction(&self.memory, &mut self.cpu);
+                let hi: u8 = 0x00;
+                let address = (u16::from(hi) << 2) + u16::from(lo);
+
+                let lo = self.memory[usize::from(address)];
+                let hi = self.memory[usize::from(address.wrapping_add(1))];
+                let address = (u16::from(hi) << 2) + u16::from(lo);
+                let address = address.wrapping_add(u16::from(self.cpu.y));
+                Some(address)
+            }
             AddressingMode::ZeroPage => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi: u8 = 0x00;
@@ -436,8 +448,8 @@ impl Computer {
                     _ => panic!("Attempted to execute STY with invalid AddressingMode"),
                 }
             }
-            Instruction::Invalid => (),
-            _ => todo!(),
+            Instruction::Invalid => panic!("Attempted to execute invalid instruction"),
+            _ => (),
         }
     }
 }
