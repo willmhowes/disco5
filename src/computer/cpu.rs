@@ -12,7 +12,7 @@ pub struct CPU {
     /// program counter register
     pub pc: u16,
     /// status register
-    pub status: StatusRegister,
+    pub p: StatusRegister,
 }
 
 /// Type for storing the flags of the status register as fields
