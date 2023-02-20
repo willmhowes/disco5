@@ -13,6 +13,31 @@ pub struct CPU {
     pub pc: u16,
     /// status register
     pub p: StatusRegister,
+    /// read/write pin. low is write
+    pub rw: ReadWrite,
+    /// interrupt pin
+    pub irq: bool,
+    /// non-maskable interrupt pin
+    pub nmi: bool,
+    pub data_bus: u8,
+    pub address_bus: u16,
+}
+
+impl CPU {
+    pub fn set_data_bus(&mut self, data: u8) {
+        self.data_bus = data;
+    }
+
+    pub fn set_address_bus(&mut self, data: u16) {
+        self.address_bus = data;
+    }
+}
+
+#[derive(Copy, Clone, Default, Debug)]
+pub enum ReadWrite {
+    Write,
+    #[default]
+    Read,
 }
 
 /// Type for storing the flags of the status register as fields
