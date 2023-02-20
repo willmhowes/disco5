@@ -1,4 +1,4 @@
-#[allow(non_camel_case_types)]
+// #[allow(non_camel_case_types)]
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
@@ -216,44 +216,47 @@ impl Computer {
     }
 
     fn set_status_nz(&mut self, test_val: u8) {
-        self.cpu.status.z = if test_val == 0 { true } else { false };
+        self.cpu.p.z = if test_val == 0 { true } else { false };
         // 0x80 = 0b1000_0000 (i.e. a negative number under two-complement encoding)
-        self.cpu.status.n = if test_val & 0x80 == 0x80 { true } else { false };
+        self.cpu.p.n = if test_val & 0x80 == 0x80 { true } else { false };
     }
 
-    fn resolve_addressing_mode(&mut self, am: AddressingMode) -> Option<u16> {
+    fn resolve_address_fetch(&mut self, am: AddressingMode) -> u16 {
         match am {
-            AddressingMode::Accumulator | AddressingMode::Implied => None,
+            AddressingMode::Accumulator
+            | AddressingMode::Implied
+            | AddressingMode::Immediate
+            | AddressingMode::Relative => {
+                panic!("Attempted to fetch an AddressingMode that is handled per instruction")
+            }
             AddressingMode::Absolute => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi = fetch_instruction(&self.memory, &mut self.cpu);
-                Some((u16::from(hi) << 2) + u16::from(lo))
+                let address = (u16::from(hi) << 8) + u16::from(lo);
+                address
             }
             AddressingMode::AbsoluteX => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi = fetch_instruction(&self.memory, &mut self.cpu);
-                let address = (u16::from(hi) << 2) + u16::from(lo);
+                let address = (u16::from(hi) << 8) + u16::from(lo);
                 let address_plus_x = address.wrapping_add(u16::from(self.cpu.x));
-                Some(address_plus_x)
+                address_plus_x
             }
             AddressingMode::AbsoluteY => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi = fetch_instruction(&self.memory, &mut self.cpu);
-                let address = (u16::from(hi) << 2) + u16::from(lo);
+                let address = (u16::from(hi) << 8) + u16::from(lo);
                 let address_plus_y = address.wrapping_add(u16::from(self.cpu.y));
-                Some(address_plus_y)
-            }
-            AddressingMode::Immediate | AddressingMode::Relative => {
-                Some(u16::from(fetch_instruction(&self.memory, &mut self.cpu)))
+                address_plus_y
             }
             AddressingMode::Indirect => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi = fetch_instruction(&self.memory, &mut self.cpu);
-                let address = (u16::from(hi) << 2) + u16::from(lo);
+                let address = (u16::from(hi) << 8) + u16::from(lo);
 
                 let lo = self.memory[usize::from(address)];
                 // The indirect jump instruction does not increment the page
-                // address whenthe indirect pointer crosses a page boundary.
+                // address when the indirect pointer crosses a page boundary.
                 // JMP ($xxFF) will fetch the address from $xxFF and $xx00.
                 // https://www.pagetable.com/c64ref/6502/?tab=3
                 let address = if address & 0x00ff == 0x00ff {
@@ -262,62 +265,62 @@ impl Computer {
                     address + 1
                 };
                 let hi = self.memory[usize::from(address)];
-                let address = (u16::from(hi) << 2) + u16::from(lo);
-                Some(address)
+                let address = (u16::from(hi) << 8) + u16::from(lo);
+                address
             }
             AddressingMode::IndirectX => {
                 let zpg = fetch_instruction(&self.memory, &mut self.cpu);
                 let lo = zpg.wrapping_add(self.cpu.x);
                 let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 2) + u16::from(lo);
+                let address = (u16::from(hi) << 8) + u16::from(lo);
 
                 let lo = self.memory[usize::from(address)];
                 // IndirectX wraps around the zeropage
                 let hi = self.memory[usize::from(address + 1) % 256];
-                let address = (u16::from(hi) << 2) + u16::from(lo);
-                Some(address)
+                let address = (u16::from(hi) << 8) + u16::from(lo);
+                address
             }
             AddressingMode::IndirectY => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 2) + u16::from(lo);
+                let address = (u16::from(hi) << 8) + u16::from(lo);
 
                 let lo = self.memory[usize::from(address)];
                 let hi = self.memory[usize::from(address.wrapping_add(1))];
-                let address = (u16::from(hi) << 2) + u16::from(lo);
+                let address = (u16::from(hi) << 8) + u16::from(lo);
                 let address = address.wrapping_add(u16::from(self.cpu.y));
-                Some(address)
+                address
             }
             AddressingMode::ZeroPage => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 2) + u16::from(lo);
-                Some(address)
+                let address = (u16::from(hi) << 8) + u16::from(lo);
+                address
             }
             AddressingMode::ZeroPageX => {
                 let zpg = fetch_instruction(&self.memory, &mut self.cpu);
                 let lo = zpg.wrapping_add(self.cpu.x);
                 let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 2) + u16::from(lo);
-                Some(address)
+                let address = (u16::from(hi) << 8) + u16::from(lo);
+                address
             }
             AddressingMode::ZeroPageY => {
                 let zpg = fetch_instruction(&self.memory, &mut self.cpu);
                 let lo = zpg.wrapping_add(self.cpu.y);
                 let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 2) + u16::from(lo);
-                Some(address)
+                let address = (u16::from(hi) << 8) + u16::from(lo);
+                address
             }
         }
     }
 
     fn adc_logic(&mut self, addend_1: u8) {
         let addend_2 = self.cpu.a;
-        let carry = if self.cpu.status.c == true { 1 } else { 0 };
+        let carry = if self.cpu.p.c == true { 1 } else { 0 };
         let result = addend_1.wrapping_add(addend_2).wrapping_add(carry);
         self.cpu.a = result;
-        self.cpu.status.c = if addend_1 >= result { true } else { false };
-        self.cpu.status.v = if (addend_1 ^ result) & (addend_2 ^ result) & 0x80 == 0x00 {
+        self.cpu.p.c = if addend_1 >= result { true } else { false };
+        self.cpu.p.v = if (addend_1 ^ result) & (addend_2 ^ result) & 0x80 == 0x00 {
             false
         } else {
             true
@@ -325,127 +328,412 @@ impl Computer {
         self.set_status_nz(self.cpu.a);
     }
 
-    // TODO: every instruction should have an AddressMode check like in CPY
+    fn branch_if(&mut self, condition: bool) {
+        let offset = fetch_instruction(&self.memory, &mut self.cpu);
+        let offset: i8 = offset as i8;
+        let mut negative = false;
+        if offset.is_negative() {
+            negative = true;
+        }
+        let offset = offset.abs();
+        let offset = offset as u16;
+        if condition && negative == false {
+            self.cpu.pc += u16::from(offset);
+        } else if condition && negative == true {
+            self.cpu.pc -= u16::from(offset);
+        }
+    }
+
     fn process_instruction(&mut self, instruction: Instruction) {
         match instruction {
-            Instruction::ADC(am) => {
-                let address = self.resolve_addressing_mode(am);
-                let address = address.unwrap();
-                if let AddressingMode::Immediate = am {
-                    self.adc_logic(address as u8);
-                } else {
+            Instruction::ADC(am) => match am {
+                AddressingMode::Absolute
+                | AddressingMode::AbsoluteX
+                | AddressingMode::AbsoluteY
+                | AddressingMode::IndirectX
+                | AddressingMode::IndirectY
+                | AddressingMode::ZeroPage
+                | AddressingMode::ZeroPageX => {
+                    let address = self.resolve_address_fetch(am);
                     let addend = self.memory[usize::from(address)];
                     self.adc_logic(addend);
                 }
-            }
-            Instruction::BNE(am) => {
-                let offset = self.resolve_addressing_mode(am);
-                let offset = offset.unwrap();
-                if let AddressingMode::Relative = am {
-                    let offset: i8 = offset as i8;
-                    let mut negative = false;
-                    if offset.is_negative() {
-                        negative = true;
-                    }
-                    let offset = offset.abs();
-                    let offset = offset as u16;
-                    if self.cpu.status.z == false && negative == false {
-                        self.cpu.pc += u16::from(offset);
-                    } else if self.cpu.status.z == false && negative == true {
-                        self.cpu.pc -= u16::from(offset);
-                    }
-                } else {
-                    panic!("Attempted to execute BNE with invalid AddressingMode");
+                AddressingMode::Immediate => {
+                    let immediate = fetch_instruction(&self.memory, &mut self.cpu);
+                    self.adc_logic(immediate);
                 }
-            }
-            Instruction::CPY(am) => {
-                let address = self.resolve_addressing_mode(am);
-                let address = address.unwrap() as u8;
-                let test_val: u8;
-                match am {
-                    AddressingMode::Absolute | AddressingMode::ZeroPage => {
-                        test_val = self.memory[usize::from(address)];
-                    }
-                    AddressingMode::Immediate => {
-                        test_val = address as u8;
-                    }
-                    _ => panic!("Attempted to execute CPY with invalid AddressingMode"),
+                _ => {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
-                self.cpu.status.c = if self.cpu.y >= test_val { true } else { false };
-                self.set_status_nz(self.cpu.y.wrapping_sub(test_val));
-            }
-            Instruction::DEY(am) => {
-                let address = self.resolve_addressing_mode(am);
-                if let None = address {
-                    self.cpu.y = self.cpu.y.wrapping_sub(1);
-                    self.set_status_nz(self.cpu.y);
-                } else {
-                    panic!("Attempted to execute DEY with invalid AddressingMode");
-                }
-            }
-            Instruction::INX(am) => {
-                let address = self.resolve_addressing_mode(am);
-                if let None = address {
-                    self.cpu.x = self.cpu.x.wrapping_add(1);
-                    self.set_status_nz(self.cpu.x);
-                } else {
-                    panic!("Attempted to execute INX with invalid AddressingMode");
-                }
-            }
-            Instruction::LDX(am) => {
-                let address = self.resolve_addressing_mode(am);
-                let address = address.unwrap() as u8;
+            },
+            Instruction::AND(am) => {
                 match am {
                     AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
                     | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
                     | AddressingMode::ZeroPage
-                    | AddressingMode::ZeroPageY => {
-                        self.cpu.x = self.memory[usize::from(address)];
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        let value = self.memory[usize::from(address)];
+                        self.cpu.a = self.cpu.a & value;
                     }
                     AddressingMode::Immediate => {
-                        self.cpu.x = address as u8;
+                        let immediate = fetch_instruction(&self.memory, &mut self.cpu);
+                        self.cpu.a = self.cpu.a & immediate;
                     }
-                    _ => panic!("Attempted to execute LDX with invalid AddressingMode"),
-                }
-                self.set_status_nz(self.cpu.x);
+                    _ => {
+                        panic!("Attempted to execute instruction with invalid AddressingMode");
+                    }
+                };
+                self.set_status_nz(self.cpu.a);
             }
-            Instruction::LDY(am) => {
-                let address = self.resolve_addressing_mode(am);
-                let address = address.unwrap() as u8;
+            Instruction::ASL(am) => {
+                let shift_result: u8;
                 match am {
                     AddressingMode::Absolute
                     | AddressingMode::AbsoluteX
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        let value = self.memory[usize::from(address)];
+                        self.cpu.p.c = if value & 0x80 == 0x80 { true } else { false };
+                        shift_result = self.cpu.a << 1;
+                        self.memory[usize::from(address)] = shift_result;
+                    }
+                    AddressingMode::Accumulator => {
+                        let immediate = fetch_instruction(&self.memory, &mut self.cpu);
+                        self.cpu.a = immediate;
+                        self.cpu.p.c = if self.cpu.a & 0x80 == 0x80 {
+                            true
+                        } else {
+                            false
+                        };
+                        self.cpu.a = self.cpu.a << 1;
+                        shift_result = self.cpu.a;
+                    }
+                    _ => {
+                        panic!("Attempted to execute instruction with invalid AddressingMode");
+                    }
+                };
+                self.set_status_nz(shift_result);
+            }
+            Instruction::BCC(am) => {
+                if let AddressingMode::Relative = am {
+                    self.branch_if(self.cpu.p.c == false);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::BCS(am) => {
+                if let AddressingMode::Relative = am {
+                    self.branch_if(self.cpu.p.c == true);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::BEQ(am) => {
+                if let AddressingMode::Relative = am {
+                    self.branch_if(self.cpu.p.z == true);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::BIT(am) => {
+                match am {
+                    AddressingMode::Absolute | AddressingMode::ZeroPage => {
+                        let address = self.resolve_address_fetch(am);
+                        let value = self.memory[usize::from(address)];
+                        let result = self.cpu.a & value;
+                        // v register <- bit 6 of value
+                        self.cpu.p.v = if value & 0x40 == 0x40 { true } else { false };
+                        // n register <- bit 7 of value
+                        self.cpu.p.n = if value & 0x80 == 0x80 { true } else { false };
+                        self.cpu.p.z = if result == 0 { true } else { false };
+                    }
+                    _ => {
+                        panic!("Attempted to execute instruction with invalid AddressingMode");
+                    }
+                };
+            }
+            Instruction::BMI(am) => {
+                if let AddressingMode::Relative = am {
+                    self.branch_if(self.cpu.p.n == true);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::BNE(am) => {
+                if let AddressingMode::Relative = am {
+                    self.branch_if(self.cpu.p.z == false);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::BPL(am) => {
+                if let AddressingMode::Relative = am {
+                    self.branch_if(self.cpu.p.n == false);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::BRK(am) => {
+                if let AddressingMode::Implied = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::BVC(am) => {
+                if let AddressingMode::Relative = am {
+                    self.branch_if(self.cpu.p.v == false);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::BVS(am) => {
+                if let AddressingMode::Relative = am {
+                    self.branch_if(self.cpu.p.v == true);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::CLC(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.p.c = false;
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::CLD(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.p.d = false;
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::CLI(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.p.i = false;
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::CLV(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.p.v = false;
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::CMP(am) => {
+                let test_val: u8;
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        test_val = self.memory[usize::from(address)];
+                    }
+                    AddressingMode::Immediate => {
+                        test_val = fetch_instruction(&self.memory, &mut self.cpu);
+                    }
+                    _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+                }
+                self.cpu.p.c = if self.cpu.a >= test_val { true } else { false };
+                self.set_status_nz(self.cpu.a.wrapping_sub(test_val));
+            }
+            Instruction::CPX(am) => {
+                let test_val: u8;
+                match am {
+                    AddressingMode::Absolute | AddressingMode::ZeroPage => {
+                        let address = self.resolve_address_fetch(am);
+                        test_val = self.memory[usize::from(address)];
+                    }
+                    AddressingMode::Immediate => {
+                        test_val = fetch_instruction(&self.memory, &mut self.cpu);
+                    }
+                    _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+                }
+                self.cpu.p.c = if self.cpu.x >= test_val { true } else { false };
+                self.set_status_nz(self.cpu.x.wrapping_sub(test_val));
+            }
+            Instruction::CPY(am) => {
+                let test_val: u8;
+                match am {
+                    AddressingMode::Absolute | AddressingMode::ZeroPage => {
+                        let address = self.resolve_address_fetch(am);
+                        test_val = self.memory[usize::from(address)];
+                    }
+                    AddressingMode::Immediate => {
+                        test_val = fetch_instruction(&self.memory, &mut self.cpu);
+                    }
+                    _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+                }
+                self.cpu.p.c = if self.cpu.y >= test_val { true } else { false };
+                self.set_status_nz(self.cpu.y.wrapping_sub(test_val));
+            }
+            Instruction::DEC(am) => match am {
+                AddressingMode::Absolute
+                | AddressingMode::AbsoluteX
+                | AddressingMode::ZeroPage
+                | AddressingMode::ZeroPageX => {
+                    let address = self.resolve_address_fetch(am);
+                    let mut to_modify = self.memory[usize::from(address)];
+                    to_modify = to_modify.wrapping_sub(1);
+                    self.memory[usize::from(address)] = to_modify;
+                    self.set_status_nz(to_modify);
+                }
+                _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+            },
+            Instruction::DEX(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.x = self.cpu.x.wrapping_sub(1);
+                    self.set_status_nz(self.cpu.x);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::DEY(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.y = self.cpu.y.wrapping_sub(1);
+                    self.set_status_nz(self.cpu.y);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::EOR(am) => {
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        let value = self.memory[usize::from(address)];
+                        self.cpu.a = self.cpu.a ^ value;
+                    }
+                    AddressingMode::Immediate => {
+                        let immediate = fetch_instruction(&self.memory, &mut self.cpu);
+                        self.cpu.a = self.cpu.a ^ immediate;
+                    }
+                    _ => {
+                        panic!("Attempted to execute instruction with invalid AddressingMode");
+                    }
+                };
+                self.set_status_nz(self.cpu.a);
+            }
+            Instruction::INC(am) => match am {
+                AddressingMode::Absolute
+                | AddressingMode::AbsoluteX
+                | AddressingMode::ZeroPage
+                | AddressingMode::ZeroPageX => {
+                    let address = self.resolve_address_fetch(am);
+                    let mut to_modify = self.memory[usize::from(address)];
+                    to_modify = to_modify.wrapping_add(1);
+                    self.memory[usize::from(address)] = to_modify;
+                    self.set_status_nz(to_modify);
+                }
+                _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+            },
+            Instruction::INX(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.x = self.cpu.x.wrapping_add(1);
+                    self.set_status_nz(self.cpu.x);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::INY(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.y = self.cpu.y.wrapping_add(1);
+                    self.set_status_nz(self.cpu.y);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::JMP(am) => {
+                if let AddressingMode::Absolute | AddressingMode::Indirect = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::JSR(am) => {
+                if let AddressingMode::Absolute = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::LDX(am) => {
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageY => {
+                        let address = self.resolve_address_fetch(am);
+                        self.cpu.x = self.memory[usize::from(address)];
+                    }
+                    AddressingMode::Immediate => {
+                        self.cpu.x = fetch_instruction(&self.memory, &mut self.cpu);
+                    }
+                    _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+                }
+                self.set_status_nz(self.cpu.x);
+            }
+            Instruction::LDY(am) => {
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
                         self.cpu.y = self.memory[usize::from(address)];
                     }
                     AddressingMode::Immediate => {
-                        self.cpu.y = address as u8;
+                        self.cpu.y = fetch_instruction(&self.memory, &mut self.cpu);
                     }
-                    _ => panic!("Attempted to execute LDY with invalid AddressingMode"),
+                    _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
                 }
                 self.set_status_nz(self.cpu.y);
             }
-            Instruction::SBC(am) => {
-                let address = self.resolve_addressing_mode(am);
-                let address = address.unwrap();
-                if let AddressingMode::Immediate = am {
-                    self.adc_logic(!(address as u8));
-                } else {
+            Instruction::SBC(am) => match am {
+                AddressingMode::Absolute
+                | AddressingMode::AbsoluteX
+                | AddressingMode::AbsoluteY
+                | AddressingMode::IndirectX
+                | AddressingMode::IndirectY
+                | AddressingMode::ZeroPage
+                | AddressingMode::ZeroPageX => {
+                    let address = self.resolve_address_fetch(am);
                     let complement = !self.memory[usize::from(address)];
                     self.adc_logic(complement);
                 }
-            }
+                AddressingMode::Immediate => {
+                    let immediate = fetch_instruction(&self.memory, &mut self.cpu);
+                    self.adc_logic(!(immediate as u8));
+                }
+                _ => {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            },
             Instruction::STY(am) => {
-                let address = self.resolve_addressing_mode(am);
-                let address = address.unwrap();
+                let address = self.resolve_address_fetch(am);
                 match am {
                     AddressingMode::Absolute
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
                         self.memory[usize::from(address)] = self.cpu.y;
                     }
-                    _ => panic!("Attempted to execute STY with invalid AddressingMode"),
+                    _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
                 }
             }
             Instruction::Invalid => panic!("Attempted to execute invalid instruction"),
@@ -460,67 +748,82 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_adc_abs() {
+        let mut computer: Computer = Default::default();
+        computer.memory[0] = 0x11;
+        computer.memory[1] = 0x11;
+        computer.memory[0x1111] = 0x0a;
+        computer.cpu.a = 0x05;
+        computer.process_instruction(Instruction::ADC(AddressingMode::Absolute));
+        assert_eq!(computer.cpu.a, 0x0f);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.c, false);
+        assert_eq!(computer.cpu.p.v, false);
+    }
+
+    #[test]
     fn test_adc_imm() {
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0x0a;
         computer.cpu.a = 0x05;
-        computer.cpu.status.c = true;
+        computer.cpu.p.c = true;
         computer.process_instruction(Instruction::ADC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0x10);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.c, false);
-        assert_eq!(computer.cpu.status.v, false);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.c, false);
+        assert_eq!(computer.cpu.p.v, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xff;
         computer.cpu.a = 0x10;
         computer.process_instruction(Instruction::ADC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0x0f);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.c, true);
-        assert_eq!(computer.cpu.status.v, false);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.c, true);
+        assert_eq!(computer.cpu.p.v, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xff;
         computer.cpu.a = 0x01;
         computer.process_instruction(Instruction::ADC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0x00);
-        assert_eq!(computer.cpu.status.z, true);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.c, true);
-        assert_eq!(computer.cpu.status.v, false);
+        assert_eq!(computer.cpu.p.z, true);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.c, true);
+        assert_eq!(computer.cpu.p.v, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xa0;
         computer.cpu.a = 0x05;
         computer.process_instruction(Instruction::ADC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0xa5);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, true);
-        assert_eq!(computer.cpu.status.c, false);
-        assert_eq!(computer.cpu.status.v, false);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, true);
+        assert_eq!(computer.cpu.p.c, false);
+        assert_eq!(computer.cpu.p.v, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0x9c;
         computer.cpu.a = 0x9c;
         computer.process_instruction(Instruction::ADC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0x38);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.c, true);
-        assert_eq!(computer.cpu.status.v, true);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.c, true);
+        assert_eq!(computer.cpu.p.v, true);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0x50;
         computer.cpu.a = 0x50;
         computer.process_instruction(Instruction::ADC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0xa0);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, true);
-        assert_eq!(computer.cpu.status.c, false);
-        assert_eq!(computer.cpu.status.v, true);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, true);
+        assert_eq!(computer.cpu.p.c, false);
+        assert_eq!(computer.cpu.p.v, true);
     }
 
     #[test]
@@ -548,33 +851,33 @@ mod tests {
         computer.memory[0] = 0xa1;
         computer.cpu.y = 0xa1;
         computer.process_instruction(Instruction::CPY(AddressingMode::Immediate));
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.z, true);
-        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.z, true);
+        assert_eq!(computer.cpu.p.c, true);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xa1;
         computer.cpu.y = 0x10;
         computer.process_instruction(Instruction::CPY(AddressingMode::Immediate));
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.c, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.c, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0x20;
         computer.cpu.y = 0x10;
         computer.process_instruction(Instruction::CPY(AddressingMode::Immediate));
-        assert_eq!(computer.cpu.status.n, true);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.c, false);
+        assert_eq!(computer.cpu.p.n, true);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.c, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0x10;
         computer.cpu.y = 0xa1;
         computer.process_instruction(Instruction::CPY(AddressingMode::Immediate));
-        assert_eq!(computer.cpu.status.n, true);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.c, true);
+        assert_eq!(computer.cpu.p.n, true);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.c, true);
     }
 
     #[test]
@@ -584,23 +887,23 @@ mod tests {
         let original_y = computer.cpu.y;
         computer.process_instruction(Instruction::DEY(AddressingMode::Implied));
         assert_eq!(computer.cpu.y, original_y - 1);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.z, true);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.z, true);
 
         let mut computer: Computer = Default::default();
         computer.cpu.y = 0x18;
         let original_y = computer.cpu.y;
         computer.process_instruction(Instruction::DEY(AddressingMode::Implied));
         assert_eq!(computer.cpu.y, original_y - 1);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.z, false);
 
         let mut computer: Computer = Default::default();
         computer.cpu.y = 0x00;
         computer.process_instruction(Instruction::DEY(AddressingMode::Implied));
         assert_eq!(computer.cpu.y, 0xff);
-        assert_eq!(computer.cpu.status.n, true);
-        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.p.n, true);
+        assert_eq!(computer.cpu.p.z, false);
     }
 
     #[test]
@@ -610,23 +913,23 @@ mod tests {
         let original_x = computer.cpu.x;
         computer.process_instruction(Instruction::INX(AddressingMode::Implied));
         assert_eq!(computer.cpu.x, original_x + 1);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.z, false);
 
         let mut computer: Computer = Default::default();
         computer.cpu.x = 0xf0;
         let original_x = computer.cpu.x;
         computer.process_instruction(Instruction::INX(AddressingMode::Implied));
         assert_eq!(computer.cpu.x, original_x + 1);
-        assert_eq!(computer.cpu.status.n, true);
-        assert_eq!(computer.cpu.status.z, false);
+        assert_eq!(computer.cpu.p.n, true);
+        assert_eq!(computer.cpu.p.z, false);
 
         let mut computer: Computer = Default::default();
         computer.cpu.x = 0xff;
         computer.process_instruction(Instruction::INX(AddressingMode::Implied));
         assert_eq!(computer.cpu.x, 0);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.z, true);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.z, true);
     }
 
     #[test]
@@ -635,21 +938,21 @@ mod tests {
         computer.memory[0] = 5;
         computer.process_instruction(Instruction::LDX(AddressingMode::Immediate));
         assert_eq!(computer.cpu.x, 5);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xf4;
         computer.process_instruction(Instruction::LDX(AddressingMode::Immediate));
         assert_eq!(computer.cpu.x, 0xf4);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, true);
 
         let mut computer: Computer = Default::default();
         computer.process_instruction(Instruction::LDX(AddressingMode::Immediate));
         assert_eq!(computer.cpu.x, 0x00);
-        assert_eq!(computer.cpu.status.z, true);
-        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.p.z, true);
+        assert_eq!(computer.cpu.p.n, false);
     }
 
     #[test]
@@ -658,21 +961,21 @@ mod tests {
         computer.memory[0] = 5;
         computer.process_instruction(Instruction::LDY(AddressingMode::Immediate));
         assert_eq!(computer.cpu.y, 5);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xf4;
         computer.process_instruction(Instruction::LDY(AddressingMode::Immediate));
         assert_eq!(computer.cpu.y, 244);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, true);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, true);
 
         let mut computer: Computer = Default::default();
         computer.process_instruction(Instruction::LDY(AddressingMode::Immediate));
         assert_eq!(computer.cpu.x, 0x00);
-        assert_eq!(computer.cpu.status.z, true);
-        assert_eq!(computer.cpu.status.n, false);
+        assert_eq!(computer.cpu.p.z, true);
+        assert_eq!(computer.cpu.p.n, false);
     }
 
     #[test]
@@ -680,57 +983,57 @@ mod tests {
         let mut computer: Computer = Default::default();
         computer.memory[0] = 6;
         computer.cpu.a = 10;
-        computer.cpu.status.c = true;
+        computer.cpu.p.c = true;
         computer.process_instruction(Instruction::SBC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 4);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.c, true);
-        assert_eq!(computer.cpu.status.v, false);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.c, true);
+        assert_eq!(computer.cpu.p.v, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0x10;
         computer.cpu.a = 0xff;
-        computer.cpu.status.c = false;
+        computer.cpu.p.c = false;
         computer.process_instruction(Instruction::SBC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0xee);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, true);
-        assert_eq!(computer.cpu.status.c, true);
-        assert_eq!(computer.cpu.status.v, false);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, true);
+        assert_eq!(computer.cpu.p.c, true);
+        assert_eq!(computer.cpu.p.v, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xff;
         computer.cpu.a = 0xff;
-        computer.cpu.status.c = true;
+        computer.cpu.p.c = true;
         computer.process_instruction(Instruction::SBC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0x00);
-        assert_eq!(computer.cpu.status.z, true);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.c, true);
-        assert_eq!(computer.cpu.status.v, false);
+        assert_eq!(computer.cpu.p.z, true);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.c, true);
+        assert_eq!(computer.cpu.p.v, false);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0xb0;
         computer.cpu.a = 0x50;
-        computer.cpu.status.c = true;
+        computer.cpu.p.c = true;
         computer.process_instruction(Instruction::SBC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0xa0);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, true);
-        assert_eq!(computer.cpu.status.c, false);
-        assert_eq!(computer.cpu.status.v, true);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, true);
+        assert_eq!(computer.cpu.p.c, false);
+        assert_eq!(computer.cpu.p.v, true);
 
         let mut computer: Computer = Default::default();
         computer.memory[0] = 0x70;
         computer.cpu.a = 0xd0;
-        computer.cpu.status.c = true;
+        computer.cpu.p.c = true;
         computer.process_instruction(Instruction::SBC(AddressingMode::Immediate));
         assert_eq!(computer.cpu.a, 0x60);
-        assert_eq!(computer.cpu.status.z, false);
-        assert_eq!(computer.cpu.status.n, false);
-        assert_eq!(computer.cpu.status.c, true);
-        assert_eq!(computer.cpu.status.v, true);
+        assert_eq!(computer.cpu.p.z, false);
+        assert_eq!(computer.cpu.p.n, false);
+        assert_eq!(computer.cpu.p.c, true);
+        assert_eq!(computer.cpu.p.v, true);
     }
 
     #[test]
