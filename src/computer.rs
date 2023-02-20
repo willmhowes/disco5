@@ -227,7 +227,7 @@ impl Computer {
             | AddressingMode::Implied
             | AddressingMode::Immediate
             | AddressingMode::Relative => {
-                panic!("Attempted to fetch an AddressingMode that is handled per instruction")
+                panic!("Attempted to fetch an AddressingMode that is intended to be handled on a per instruction")
             }
             AddressingMode::Absolute => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
