@@ -403,8 +403,6 @@ impl Computer {
                         self.memory[usize::from(address)] = shift_result;
                     }
                     AddressingMode::Accumulator => {
-                        let immediate = fetch_instruction(&self.memory, &mut self.cpu);
-                        self.cpu.a = immediate;
                         self.cpu.p.c = if self.cpu.a & 0x80 == 0x80 {
                             true
                         } else {
@@ -673,6 +671,25 @@ impl Computer {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
+            Instruction::LDA(am) => {
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        self.cpu.a = self.memory[usize::from(address)];
+                    }
+                    AddressingMode::Immediate => {
+                        self.cpu.a = fetch_instruction(&self.memory, &mut self.cpu);
+                    }
+                    _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+                }
+                self.set_status_nz(self.cpu.a);
+            }
             Instruction::LDX(am) => {
                 match am {
                     AddressingMode::Absolute
@@ -705,6 +722,177 @@ impl Computer {
                 }
                 self.set_status_nz(self.cpu.y);
             }
+            Instruction::LSR(am) => {
+                let shift_result: u8;
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        let value = self.memory[usize::from(address)];
+                        self.cpu.p.c = if value & 0x01 == 0x01 { true } else { false };
+                        shift_result = self.cpu.a >> 1;
+                        self.memory[usize::from(address)] = shift_result;
+                    }
+                    AddressingMode::Accumulator => {
+                        self.cpu.p.c = if self.cpu.a & 0x01 == 0x01 {
+                            true
+                        } else {
+                            false
+                        };
+                        self.cpu.a = self.cpu.a >> 1;
+                        shift_result = self.cpu.a;
+                    }
+                    _ => {
+                        panic!("Attempted to execute instruction with invalid AddressingMode");
+                    }
+                };
+                self.set_status_nz(shift_result);
+            }
+            Instruction::NOP(am) => {
+                if let AddressingMode::Implied = am {
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::ORA(am) => {
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        let value = self.memory[usize::from(address)];
+                        self.cpu.a = self.cpu.a | value;
+                    }
+                    AddressingMode::Immediate => {
+                        let immediate = fetch_instruction(&self.memory, &mut self.cpu);
+                        self.cpu.a = self.cpu.a | immediate;
+                    }
+                    _ => {
+                        panic!("Attempted to execute instruction with invalid AddressingMode");
+                    }
+                };
+                self.set_status_nz(self.cpu.a);
+            }
+            Instruction::PHA(am) => {
+                if let AddressingMode::Implied = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::PHP(am) => {
+                if let AddressingMode::Implied = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::PLA(am) => {
+                if let AddressingMode::Implied = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::PLP(am) => {
+                if let AddressingMode::Implied = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::ROL(am) => {
+                let shift_result: u8;
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        let mut value = self.memory[usize::from(address)];
+                        let tail = self.cpu.p.c;
+                        self.cpu.p.c = if value & 0x80 == 0x80 { true } else { false };
+                        value = self.cpu.a << 1;
+                        shift_result = if tail == true { value | 0x01 } else { value };
+                        self.memory[usize::from(address)] = shift_result;
+                    }
+                    AddressingMode::Accumulator => {
+                        let tail = self.cpu.p.c;
+                        self.cpu.p.c = if self.cpu.a & 0x80 == 0x80 {
+                            true
+                        } else {
+                            false
+                        };
+                        self.cpu.a = self.cpu.a << 1;
+                        self.cpu.a = if tail == true {
+                            self.cpu.a | 0x01
+                        } else {
+                            self.cpu.a
+                        };
+                        shift_result = self.cpu.a;
+                    }
+                    _ => {
+                        panic!("Attempted to execute instruction with invalid AddressingMode");
+                    }
+                };
+                self.set_status_nz(shift_result);
+            }
+            Instruction::ROR(am) => {
+                let shift_result: u8;
+                match am {
+                    AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX => {
+                        let address = self.resolve_address_fetch(am);
+                        let mut value = self.memory[usize::from(address)];
+                        let tail = self.cpu.p.c;
+                        self.cpu.p.c = if value & 0x01 == 0x01 { true } else { false };
+                        value = self.cpu.a >> 1;
+                        shift_result = if tail == true { value | 0x80 } else { value };
+                        self.memory[usize::from(address)] = shift_result;
+                    }
+                    AddressingMode::Accumulator => {
+                        let tail = self.cpu.p.c;
+                        self.cpu.p.c = if self.cpu.a & 0x10 == 0x10 {
+                            true
+                        } else {
+                            false
+                        };
+                        self.cpu.a = self.cpu.a >> 1;
+                        self.cpu.a = if tail == true {
+                            self.cpu.a | 0x80
+                        } else {
+                            self.cpu.a
+                        };
+                        shift_result = self.cpu.a;
+                    }
+                    _ => {
+                        panic!("Attempted to execute instruction with invalid AddressingMode");
+                    }
+                };
+                self.set_status_nz(shift_result);
+            }
+            Instruction::RTI(am) => {
+                if let AddressingMode::Implied = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::RTS(am) => {
+                if let AddressingMode::Implied = am {
+                    todo!();
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
             Instruction::SBC(am) => match am {
                 AddressingMode::Absolute
                 | AddressingMode::AbsoluteX
@@ -725,19 +913,102 @@ impl Computer {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             },
-            Instruction::STY(am) => {
-                let address = self.resolve_address_fetch(am);
-                match am {
-                    AddressingMode::Absolute
-                    | AddressingMode::ZeroPage
-                    | AddressingMode::ZeroPageX => {
-                        self.memory[usize::from(address)] = self.cpu.y;
-                    }
-                    _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+            Instruction::SEC(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.p.c = true;
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::SED(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.p.d = true;
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::SEI(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.p.i = true;
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::STA(am) => match am {
+                AddressingMode::Absolute
+                | AddressingMode::AbsoluteX
+                | AddressingMode::AbsoluteY
+                | AddressingMode::IndirectX
+                | AddressingMode::IndirectY
+                | AddressingMode::ZeroPage
+                | AddressingMode::ZeroPageX => {
+                    let address = self.resolve_address_fetch(am);
+                    self.memory[usize::from(address)] = self.cpu.a;
+                }
+                _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+            },
+            Instruction::STX(am) => match am {
+                AddressingMode::Absolute | AddressingMode::ZeroPage | AddressingMode::ZeroPageX => {
+                    let address = self.resolve_address_fetch(am);
+                    self.memory[usize::from(address)] = self.cpu.x;
+                }
+                _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+            },
+            Instruction::STY(am) => match am {
+                AddressingMode::Absolute | AddressingMode::ZeroPage | AddressingMode::ZeroPageX => {
+                    let address = self.resolve_address_fetch(am);
+                    self.memory[usize::from(address)] = self.cpu.y;
+                }
+                _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
+            },
+            Instruction::TAX(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.x = self.cpu.a;
+                    self.set_status_nz(self.cpu.x);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::TAY(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.y = self.cpu.a;
+                    self.set_status_nz(self.cpu.y);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::TSX(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.x = self.cpu.sp;
+                    self.set_status_nz(self.cpu.x);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::TXA(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.a = self.cpu.x;
+                    self.set_status_nz(self.cpu.a);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::TXS(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.sp = self.cpu.x;
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::TYA(am) => {
+                if let AddressingMode::Implied = am {
+                    self.cpu.a = self.cpu.y;
+                    self.set_status_nz(self.cpu.a);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::Invalid => panic!("Attempted to execute invalid instruction"),
-            _ => (),
         }
     }
 }
