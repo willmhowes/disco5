@@ -158,6 +158,7 @@ pub struct Computer {
     pub cpu: CPU,
     pub memory: [u8; MEMORY_SIZE],
     pub flags: StatusRegister,
+    pub clock: u64,
 }
 
 impl Default for Computer {
@@ -168,11 +169,16 @@ impl Default for Computer {
             },
             memory: [0; MEMORY_SIZE],
             flags: Default::default(),
+            clock: Default::default(),
         }
     }
 }
 
 impl Computer {
+    pub fn tick(&mut self, num: u8) {
+        self.clock += u64::from(num);
+    }
+
     pub fn load_program(&mut self, filename: &str) -> io::Result<()> {
         let memory = &mut self.memory;
         let cpu = &mut self.cpu;
@@ -221,33 +227,40 @@ impl Computer {
         self.cpu.p.n = if test_val & 0x80 == 0x80 { true } else { false };
     }
 
-    fn resolve_address_fetch(&mut self, am: AddressingMode) -> u16 {
+    /// returns the address and whether or not a page was crossed
+    fn resolve_address_fetch(&mut self, am: AddressingMode) -> (u16, bool) {
         match am {
             AddressingMode::Accumulator
             | AddressingMode::Implied
             | AddressingMode::Immediate
             | AddressingMode::Relative => {
-                panic!("Attempted to fetch an AddressingMode that is intended to be handled on a per instruction")
+                panic!("Attempted to fetch an AddressingMode that is intended to be handled on a per instruction basis")
             }
             AddressingMode::Absolute => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi = fetch_instruction(&self.memory, &mut self.cpu);
                 let address = (u16::from(hi) << 8) + u16::from(lo);
-                address
+                (address, false)
             }
             AddressingMode::AbsoluteX => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi = fetch_instruction(&self.memory, &mut self.cpu);
                 let address = (u16::from(hi) << 8) + u16::from(lo);
                 let address_plus_x = address.wrapping_add(u16::from(self.cpu.x));
-                address_plus_x
+                // bitmask the high 8 bits and compare. If they are different,
+                // then a page boundary has been crossed
+                let boundary_crossed = (address & 0xff00) != (address_plus_x & 0xff00);
+                (address_plus_x, boundary_crossed)
             }
             AddressingMode::AbsoluteY => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi = fetch_instruction(&self.memory, &mut self.cpu);
                 let address = (u16::from(hi) << 8) + u16::from(lo);
                 let address_plus_y = address.wrapping_add(u16::from(self.cpu.y));
-                address_plus_y
+                // bitmask the high 8 bits and compare. If they are different,
+                // then a page boundary has been crossed
+                let boundary_crossed = (address & 0xff00) != (address_plus_y & 0xff00);
+                (address_plus_y, boundary_crossed)
             }
             AddressingMode::Indirect => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
@@ -266,7 +279,7 @@ impl Computer {
                 };
                 let hi = self.memory[usize::from(address)];
                 let address = (u16::from(hi) << 8) + u16::from(lo);
-                address
+                (address, false)
             }
             AddressingMode::IndirectX => {
                 let zpg = fetch_instruction(&self.memory, &mut self.cpu);
@@ -278,7 +291,7 @@ impl Computer {
                 // IndirectX wraps around the zeropage
                 let hi = self.memory[usize::from(address + 1) % 256];
                 let address = (u16::from(hi) << 8) + u16::from(lo);
-                address
+                (address, false)
             }
             AddressingMode::IndirectY => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
@@ -288,28 +301,31 @@ impl Computer {
                 let lo = self.memory[usize::from(address)];
                 let hi = self.memory[usize::from(address.wrapping_add(1))];
                 let address = (u16::from(hi) << 8) + u16::from(lo);
-                let address = address.wrapping_add(u16::from(self.cpu.y));
-                address
+                let address_plus_y = address.wrapping_add(u16::from(self.cpu.y));
+                // bitmask the high 8 bits and compare. If they are different,
+                // then a page boundary has been crossed
+                let boundary_crossed = (address & 0xff00) != (address_plus_y & 0xff00);
+                (address_plus_y, boundary_crossed)
             }
             AddressingMode::ZeroPage => {
                 let lo = fetch_instruction(&self.memory, &mut self.cpu);
                 let hi: u8 = 0x00;
                 let address = (u16::from(hi) << 8) + u16::from(lo);
-                address
+                (address, false)
             }
             AddressingMode::ZeroPageX => {
                 let zpg = fetch_instruction(&self.memory, &mut self.cpu);
                 let lo = zpg.wrapping_add(self.cpu.x);
                 let hi: u8 = 0x00;
                 let address = (u16::from(hi) << 8) + u16::from(lo);
-                address
+                (address, false)
             }
             AddressingMode::ZeroPageY => {
                 let zpg = fetch_instruction(&self.memory, &mut self.cpu);
                 let lo = zpg.wrapping_add(self.cpu.y);
                 let hi: u8 = 0x00;
                 let address = (u16::from(hi) << 8) + u16::from(lo);
-                address
+                (address, false)
             }
         }
     }
@@ -328,7 +344,8 @@ impl Computer {
         self.set_status_nz(self.cpu.a);
     }
 
-    fn branch_if(&mut self, condition: bool) {
+    /// returns whether or not a page was crossed
+    fn branch_if(&mut self, condition: bool) -> bool {
         let offset = fetch_instruction(&self.memory, &mut self.cpu);
         let offset: i8 = offset as i8;
         let mut negative = false;
@@ -337,14 +354,21 @@ impl Computer {
         }
         let offset = offset.abs();
         let offset = offset as u16;
+        let mut pc_update: u16 = self.cpu.pc;
         if condition && negative == false {
-            self.cpu.pc += u16::from(offset);
+            pc_update += u16::from(offset);
         } else if condition && negative == true {
-            self.cpu.pc -= u16::from(offset);
+            pc_update -= u16::from(offset);
         }
+        // bitmask the high 8 bits and compare. If they are different,
+        // then a page boundary has been crossed
+        let boundary_crossed = (self.cpu.pc & 0xff00) != (pc_update & 0xff00);
+        self.cpu.pc = pc_update;
+        boundary_crossed
     }
 
     fn process_instruction(&mut self, instruction: Instruction) {
+        let num_ticks: u8;
         match instruction {
             Instruction::ADC(am) => match am {
                 AddressingMode::Absolute
@@ -354,7 +378,7 @@ impl Computer {
                 | AddressingMode::IndirectY
                 | AddressingMode::ZeroPage
                 | AddressingMode::ZeroPageX => {
-                    let address = self.resolve_address_fetch(am);
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
                     let addend = self.memory[usize::from(address)];
                     self.adc_logic(addend);
                 }
@@ -375,7 +399,7 @@ impl Computer {
                     | AddressingMode::IndirectY
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         let value = self.memory[usize::from(address)];
                         self.cpu.a = self.cpu.a & value;
                     }
@@ -396,7 +420,7 @@ impl Computer {
                     | AddressingMode::AbsoluteX
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         let value = self.memory[usize::from(address)];
                         self.cpu.p.c = if value & 0x80 == 0x80 { true } else { false };
                         shift_result = self.cpu.a << 1;
@@ -419,21 +443,21 @@ impl Computer {
             }
             Instruction::BCC(am) => {
                 if let AddressingMode::Relative = am {
-                    self.branch_if(self.cpu.p.c == false);
+                    let boundary_crossed = self.branch_if(self.cpu.p.c == false);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::BCS(am) => {
                 if let AddressingMode::Relative = am {
-                    self.branch_if(self.cpu.p.c == true);
+                    let boundary_crossed = self.branch_if(self.cpu.p.c == true);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::BEQ(am) => {
                 if let AddressingMode::Relative = am {
-                    self.branch_if(self.cpu.p.z == true);
+                    let boundary_crossed = self.branch_if(self.cpu.p.z == true);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
@@ -441,7 +465,7 @@ impl Computer {
             Instruction::BIT(am) => {
                 match am {
                     AddressingMode::Absolute | AddressingMode::ZeroPage => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         let value = self.memory[usize::from(address)];
                         let result = self.cpu.a & value;
                         // v register <- bit 6 of value
@@ -457,21 +481,21 @@ impl Computer {
             }
             Instruction::BMI(am) => {
                 if let AddressingMode::Relative = am {
-                    self.branch_if(self.cpu.p.n == true);
+                    let boundary_crossed = self.branch_if(self.cpu.p.n == true);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::BNE(am) => {
                 if let AddressingMode::Relative = am {
-                    self.branch_if(self.cpu.p.z == false);
+                    let boundary_crossed = self.branch_if(self.cpu.p.z == false);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::BPL(am) => {
                 if let AddressingMode::Relative = am {
-                    self.branch_if(self.cpu.p.n == false);
+                    let boundary_crossed = self.branch_if(self.cpu.p.n == false);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
@@ -485,14 +509,14 @@ impl Computer {
             }
             Instruction::BVC(am) => {
                 if let AddressingMode::Relative = am {
-                    self.branch_if(self.cpu.p.v == false);
+                    let boundary_crossed = self.branch_if(self.cpu.p.v == false);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::BVS(am) => {
                 if let AddressingMode::Relative = am {
-                    self.branch_if(self.cpu.p.v == true);
+                    let boundary_crossed = self.branch_if(self.cpu.p.v == true);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
@@ -535,7 +559,7 @@ impl Computer {
                     | AddressingMode::IndirectY
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         test_val = self.memory[usize::from(address)];
                     }
                     AddressingMode::Immediate => {
@@ -550,7 +574,7 @@ impl Computer {
                 let test_val: u8;
                 match am {
                     AddressingMode::Absolute | AddressingMode::ZeroPage => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         test_val = self.memory[usize::from(address)];
                     }
                     AddressingMode::Immediate => {
@@ -565,7 +589,7 @@ impl Computer {
                 let test_val: u8;
                 match am {
                     AddressingMode::Absolute | AddressingMode::ZeroPage => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         test_val = self.memory[usize::from(address)];
                     }
                     AddressingMode::Immediate => {
@@ -581,7 +605,7 @@ impl Computer {
                 | AddressingMode::AbsoluteX
                 | AddressingMode::ZeroPage
                 | AddressingMode::ZeroPageX => {
-                    let address = self.resolve_address_fetch(am);
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
                     let mut to_modify = self.memory[usize::from(address)];
                     to_modify = to_modify.wrapping_sub(1);
                     self.memory[usize::from(address)] = to_modify;
@@ -614,7 +638,7 @@ impl Computer {
                     | AddressingMode::IndirectY
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         let value = self.memory[usize::from(address)];
                         self.cpu.a = self.cpu.a ^ value;
                     }
@@ -633,7 +657,7 @@ impl Computer {
                 | AddressingMode::AbsoluteX
                 | AddressingMode::ZeroPage
                 | AddressingMode::ZeroPageX => {
-                    let address = self.resolve_address_fetch(am);
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
                     let mut to_modify = self.memory[usize::from(address)];
                     to_modify = to_modify.wrapping_add(1);
                     self.memory[usize::from(address)] = to_modify;
@@ -680,7 +704,7 @@ impl Computer {
                     | AddressingMode::IndirectY
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         self.cpu.a = self.memory[usize::from(address)];
                     }
                     AddressingMode::Immediate => {
@@ -696,7 +720,7 @@ impl Computer {
                     | AddressingMode::AbsoluteY
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageY => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         self.cpu.x = self.memory[usize::from(address)];
                     }
                     AddressingMode::Immediate => {
@@ -712,7 +736,7 @@ impl Computer {
                     | AddressingMode::AbsoluteX
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         self.cpu.y = self.memory[usize::from(address)];
                     }
                     AddressingMode::Immediate => {
@@ -729,7 +753,7 @@ impl Computer {
                     | AddressingMode::AbsoluteX
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         let value = self.memory[usize::from(address)];
                         self.cpu.p.c = if value & 0x01 == 0x01 { true } else { false };
                         shift_result = self.cpu.a >> 1;
@@ -765,7 +789,7 @@ impl Computer {
                     | AddressingMode::IndirectY
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         let value = self.memory[usize::from(address)];
                         self.cpu.a = self.cpu.a | value;
                     }
@@ -814,7 +838,7 @@ impl Computer {
                     | AddressingMode::AbsoluteX
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         let mut value = self.memory[usize::from(address)];
                         let tail = self.cpu.p.c;
                         self.cpu.p.c = if value & 0x80 == 0x80 { true } else { false };
@@ -850,7 +874,7 @@ impl Computer {
                     | AddressingMode::AbsoluteX
                     | AddressingMode::ZeroPage
                     | AddressingMode::ZeroPageX => {
-                        let address = self.resolve_address_fetch(am);
+                        let (address, boundary_crossed) = self.resolve_address_fetch(am);
                         let mut value = self.memory[usize::from(address)];
                         let tail = self.cpu.p.c;
                         self.cpu.p.c = if value & 0x01 == 0x01 { true } else { false };
@@ -901,7 +925,7 @@ impl Computer {
                 | AddressingMode::IndirectY
                 | AddressingMode::ZeroPage
                 | AddressingMode::ZeroPageX => {
-                    let address = self.resolve_address_fetch(am);
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
                     let complement = !self.memory[usize::from(address)];
                     self.adc_logic(complement);
                 }
@@ -942,21 +966,21 @@ impl Computer {
                 | AddressingMode::IndirectY
                 | AddressingMode::ZeroPage
                 | AddressingMode::ZeroPageX => {
-                    let address = self.resolve_address_fetch(am);
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
                     self.memory[usize::from(address)] = self.cpu.a;
                 }
                 _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
             },
             Instruction::STX(am) => match am {
                 AddressingMode::Absolute | AddressingMode::ZeroPage | AddressingMode::ZeroPageX => {
-                    let address = self.resolve_address_fetch(am);
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
                     self.memory[usize::from(address)] = self.cpu.x;
                 }
                 _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
             },
             Instruction::STY(am) => match am {
                 AddressingMode::Absolute | AddressingMode::ZeroPage | AddressingMode::ZeroPageX => {
-                    let address = self.resolve_address_fetch(am);
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
                     self.memory[usize::from(address)] = self.cpu.y;
                 }
                 _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
@@ -1010,6 +1034,7 @@ impl Computer {
             }
             Instruction::Invalid => panic!("Attempted to execute invalid instruction"),
         }
+        self.tick(num_ticks);
     }
 }
 
