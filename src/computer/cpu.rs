@@ -59,6 +59,50 @@ pub struct StatusRegister {
     pub c: bool,
 }
 
+impl StatusRegister {
+    /// returns status register represented by an 8-bit number
+    pub fn to_byte(&self) -> u8 {
+        let mut byte: u8 = 0;
+
+        let n:u8 = 0b1000_0000;
+        if self.n == true {
+            byte = byte | n;
+        }
+
+        let v:u8 = 0b0100_0000;
+        if self.v == true {
+            byte = byte | v;
+        }
+
+        let b:u8 = 0b0001_0000;
+        if self.b == true {
+            byte = byte | b;
+        }
+
+        let d:u8 = 0b0000_1000;
+        if self.d == true {
+            byte = byte | d;
+        }
+
+        let i:u8 = 0b0000_0100;
+        if self.i == true {
+            byte = byte | i;
+        }
+
+        let z:u8 = 0b0000_0010;
+        if self.z == true {
+            byte = byte | z;
+        }
+
+        let c:u8 = 0b0000_0001;
+        if self.c == true {
+            byte = byte | c;
+        }
+
+        byte
+    }
+}
+
 impl CPU {
     /// steps pc to next position
     pub fn step(&mut self) {
