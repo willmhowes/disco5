@@ -62,50 +62,49 @@ pub struct StatusRegister {
 impl StatusRegister {
     /// returns status register represented by an 8-bit number
     pub fn to_byte(&self) -> u8 {
-        let mut byte: u8 = 0;
+        // unused flag is always set to 1
+        let mut byte: u8 = 0b0010_0000;
 
-        let n:u8 = 0b1000_0000;
-        if self.n == true {
-            byte = byte | n;
-        }
-
-        let v:u8 = 0b0100_0000;
-        if self.v == true {
-            byte = byte | v;
-        }
-
-        let b:u8 = 0b0001_0000;
-        if self.b == true {
-            byte = byte | b;
-        }
-
-        let d:u8 = 0b0000_1000;
-        if self.d == true {
-            byte = byte | d;
-        }
-
-        let i:u8 = 0b0000_0100;
-        if self.i == true {
-            byte = byte | i;
-        }
-
-        let z:u8 = 0b0000_0010;
-        if self.z == true {
-            byte = byte | z;
-        }
-
-        let c:u8 = 0b0000_0001;
-        if self.c == true {
-            byte = byte | c;
-        }
+        let n: u8 = 0b1000_0000;
+        let v: u8 = 0b0100_0000;
+        let b: u8 = 0b0001_0000;
+        let d: u8 = 0b0000_1000;
+        let i: u8 = 0b0000_0100;
+        let z: u8 = 0b0000_0010;
+        let c: u8 = 0b0000_0001;
+        byte = if self.n == true { byte | n } else { byte };
+        byte = if self.v == true { byte | v } else { byte };
+        byte = if self.b == true { byte | b } else { byte };
+        byte = if self.d == true { byte | d } else { byte };
+        byte = if self.i == true { byte | i } else { byte };
+        byte = if self.z == true { byte | z } else { byte };
+        byte = if self.c == true { byte | c } else { byte };
 
         byte
+    }
+
+    /// sets status register using an 8-bit number
+    pub fn from_byte(&mut self, p: u8) {
+        let n: u8 = 0b1000_0000;
+        let v: u8 = 0b0100_0000;
+        let b: u8 = 0b0001_0000;
+        let d: u8 = 0b0000_1000;
+        let i: u8 = 0b0000_0100;
+        let z: u8 = 0b0000_0010;
+        let c: u8 = 0b0000_0001;
+        self.n = if p & n == n { true } else { false };
+        self.v = if p & v == v { true } else { false };
+        self.b = if p & b == b { true } else { false };
+        self.d = if p & d == d { true } else { false };
+        self.i = if p & i == i { true } else { false };
+        self.z = if p & z == z { true } else { false };
+        self.c = if p & c == c { true } else { false };
     }
 }
 
 impl CPU {
     /// steps pc to next position
-    pub fn step(&mut self) {
+    pub fn step_pc(&mut self) {
         self.pc = self.pc + 1;
     }
 }
