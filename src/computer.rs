@@ -149,7 +149,7 @@ pub enum Instruction {
 /// loads instruction at address of pc, increments pc
 fn fetch_instruction(memory: &[u8], cpu: &mut CPU) -> u8 {
     let index = cpu.pc;
-    cpu.step();
+    cpu.step_pc();
     memory[index as usize]
 }
 
@@ -216,7 +216,11 @@ impl Computer {
         while usize::from(self.cpu.pc) < self.memory.len() {
             let instruction = fetch_instruction(&self.memory, &mut self.cpu);
             let (instruction, minimum_ticks) = map_byte_to_instruction(instruction);
-            println!("{:?} - {:?}", instruction, minimum_ticks);
+            if let Instruction::BRK(AddressingMode::Implied) = instruction {
+            } else {
+                print!("{:?} - {:?} - ", instruction, minimum_ticks);
+                println!("{}", self.clock);
+            }
             self.process_instruction(instruction, minimum_ticks);
         }
     }
@@ -365,6 +369,18 @@ impl Computer {
         let boundary_crossed = (self.cpu.pc & 0xff00) != (pc_update & 0xff00);
         self.cpu.pc = pc_update;
         boundary_crossed
+    }
+
+    fn push_stack(&mut self, byte: u8) {
+        let address = (0x01 << 8) + u16::from(self.cpu.sp);
+        self.memory[usize::from(address)] = byte;
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+    }
+
+    fn pop_stack(&mut self) -> u8 {
+        let address = (0x01 << 8) + u16::from(self.cpu.sp);
+        self.cpu.sp = self.cpu.sp.wrapping_add(1);
+        self.memory[usize::from(address)]
     }
 
     fn process_instruction(&mut self, instruction: Instruction, minimum_ticks: u8) {
@@ -532,7 +548,31 @@ impl Computer {
             }
             Instruction::BRK(am) => {
                 if let AddressingMode::Implied = am {
-                    // todo!();
+                    // BRK stores the location of the pc+2 in the stack, even though
+                    // BRK is a 1 byte instruction. Our program increments PC
+                    // when reading an instruction so the PC is already incremented by
+                    // one. Thus, we add store pc+1 in the stack, which is equal to the
+                    // third byte as intended.
+                    let to_be_pushed = self.cpu.pc + 1;
+                    let lo = to_be_pushed as u8;
+                    let hi = (to_be_pushed >> 8) as u8;
+                    self.push_stack(hi);
+                    self.push_stack(lo);
+
+                    // store self.cpu.p on stack with a set b flag
+                    let b: u8 = 0b0001_0000;
+                    let p = self.cpu.p.to_byte() | b;
+
+                    self.push_stack(p);
+
+                    // fetch address of interrupt handler
+                    let lo = self.memory[0xfffe];
+                    let hi = self.memory[0xffff];
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    self.cpu.pc = address;
+
+                    // set interrupt disable flag
+                    self.cpu.p.i = true;
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
@@ -737,14 +777,32 @@ impl Computer {
             }
             Instruction::JMP(am) => {
                 if let AddressingMode::Absolute | AddressingMode::Indirect = am {
-                    todo!();
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
+                    if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    self.cpu.pc = address;
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::JSR(am) => {
                 if let AddressingMode::Absolute = am {
-                    todo!();
+                    // JSR stores the location of the last byte in the instruction.
+                    // JSR is a 3 byte instruction, and our program increments PC
+                    // when reading an instruction so the PC is already pointing at
+                    // the second byte. Thus, we add store pc+1 in the stack, which is
+                    // equal to the third byte as intended.
+                    let to_be_pushed = self.cpu.pc + 1;
+                    let (address, boundary_crossed) = self.resolve_address_fetch(am);
+                    if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    let lo = to_be_pushed as u8;
+                    let hi = (to_be_pushed >> 8) as u8;
+                    self.push_stack(hi);
+                    self.push_stack(lo);
+                    self.cpu.pc = address;
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
@@ -874,28 +932,33 @@ impl Computer {
             }
             Instruction::PHA(am) => {
                 if let AddressingMode::Implied = am {
-                    todo!();
+                    self.push_stack(self.cpu.a);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::PHP(am) => {
                 if let AddressingMode::Implied = am {
-                    todo!();
+                    let b: u8 = 0b0001_0000;
+                    let p = self.cpu.p.to_byte() | b;
+                    self.push_stack(p);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::PLA(am) => {
                 if let AddressingMode::Implied = am {
-                    todo!();
+                    self.cpu.a = self.pop_stack();
+                    self.set_status_nz(self.cpu.a);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::PLP(am) => {
                 if let AddressingMode::Implied = am {
-                    todo!();
+                    // bits 4 and 5 are ignored
+                    let p = self.pop_stack() & 0b1100_1111;
+                    self.cpu.p.set_from_byte(p)
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
@@ -980,14 +1043,25 @@ impl Computer {
             }
             Instruction::RTI(am) => {
                 if let AddressingMode::Implied = am {
-                    todo!();
+                    // bits 4 and 5 are ignored
+                    let p = self.pop_stack() & 0b1100_1111;
+                    self.cpu.p.set_from_byte(p);
+                    
+                    let lo = self.pop_stack();
+                    let hi = self.pop_stack();
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    self.cpu.pc = address;
+
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
             Instruction::RTS(am) => {
                 if let AddressingMode::Implied = am {
-                    todo!();
+                    let lo = self.pop_stack();
+                    let hi = self.pop_stack();
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    self.cpu.pc = address.wrapping_add(1);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
