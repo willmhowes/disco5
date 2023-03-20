@@ -84,7 +84,7 @@ impl StatusRegister {
     }
 
     /// sets status register using an 8-bit number
-    pub fn from_byte(&mut self, p: u8) {
+    pub fn set_from_byte(&mut self, p: u8) {
         let n: u8 = 0b1000_0000;
         let v: u8 = 0b0100_0000;
         let b: u8 = 0b0001_0000;
