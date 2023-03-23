@@ -9,7 +9,7 @@ pub mod opcode_map;
 use crate::computer::cpu::*;
 use crate::computer::opcode_map::map_byte_to_instruction;
 
-const MEMORY_SIZE: usize = 0xffff;
+const MEMORY_SIZE: usize = 0x10000;
 
 #[derive(Debug, Copy, Clone)]
 pub enum AddressingMode {
