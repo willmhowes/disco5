@@ -11,7 +11,7 @@ fn countdown_program() {
     println!("BEFORE: 0600: {:?}", &computer.memory[600..616]);
     println!("BEFORE: 0016: {:?}", &computer.memory[16..32]);
 
-    computer.run_program();
+    computer.run_program(true);
 
     println!("AFTER : 0016: {:?}", &computer.memory[16..32]);
 
