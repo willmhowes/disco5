@@ -2,6 +2,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
+use std::{thread, time};
 
 pub mod cpu;
 pub mod opcode_map;
@@ -212,16 +213,39 @@ impl Computer {
         Ok(())
     }
 
-    pub fn run_program(&mut self) {
+    pub fn load_program_from_hex(&mut self, filename: &str) -> io::Result<()> {
+        let memory = &mut self.memory;
+        let cpu = &mut self.cpu;
+
+        // Load file contents into memory array
+        let f = File::open(filename)?;
+        let mut f = BufReader::new(f);
+        let bytes_read = f.read(memory)?;
+        println!("{bytes_read} bytes read");
+
+        cpu.pc = 0x400;
+
+        Ok(())
+    }
+
+    pub fn run_program(&mut self, loud: bool) {
         while usize::from(self.cpu.pc) < self.memory.len() {
+            let mut line = String::new();
+            // let b1 = std::io::stdin().read_line(&mut line).unwrap();
             let instruction = fetch_instruction(&self.memory, &mut self.cpu);
             let (instruction, minimum_ticks) = map_byte_to_instruction(instruction);
-            if let Instruction::BRK(AddressingMode::Implied) = instruction {
-            } else {
-                print!("{:?} - {:?} - ", instruction, minimum_ticks);
-                println!("{}", self.clock);
+            if loud {
+                if let Instruction::BRK(AddressingMode::Implied) = instruction {
+                    break;
+                } else {
+                    println!("Clock = {}", self.clock);
+                    println!("{:?}, {:?} ticks", instruction, minimum_ticks);
+                }
             }
             self.process_instruction(instruction, minimum_ticks);
+            if loud {
+                self.cpu.print_state();
+            }
         }
     }
 
@@ -468,8 +492,12 @@ impl Computer {
             }
             Instruction::BCC(am) => {
                 if let AddressingMode::Relative = am {
-                    let boundary_crossed = self.branch_if(self.cpu.p.c == false);
+                    let condition = self.cpu.p.c == false;
+                    let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    if condition == true {
                         num_ticks += 1;
                     }
                 } else {
@@ -478,8 +506,12 @@ impl Computer {
             }
             Instruction::BCS(am) => {
                 if let AddressingMode::Relative = am {
-                    let boundary_crossed = self.branch_if(self.cpu.p.c == true);
+                    let condition = self.cpu.p.c == true;
+                    let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    if condition == true {
                         num_ticks += 1;
                     }
                 } else {
@@ -488,8 +520,15 @@ impl Computer {
             }
             Instruction::BEQ(am) => {
                 if let AddressingMode::Relative = am {
-                    let boundary_crossed = self.branch_if(self.cpu.p.z == true);
+                    println!("----------");
+                    println!("INSIDE BEQ RELATIVE");
+                    println!("----------");
+                    let condition = self.cpu.p.z == true;
+                    let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    if condition == true {
                         num_ticks += 1;
                     }
                 } else {
@@ -518,8 +557,12 @@ impl Computer {
             }
             Instruction::BMI(am) => {
                 if let AddressingMode::Relative = am {
-                    let boundary_crossed = self.branch_if(self.cpu.p.n == true);
+                    let condition = self.cpu.p.n == true;
+                    let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    if condition == true {
                         num_ticks += 1;
                     }
                 } else {
@@ -528,8 +571,12 @@ impl Computer {
             }
             Instruction::BNE(am) => {
                 if let AddressingMode::Relative = am {
-                    let boundary_crossed = self.branch_if(self.cpu.p.z == false);
+                    let condition = self.cpu.p.z == false;
+                    let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    if condition == true {
                         num_ticks += 1;
                     }
                 } else {
@@ -538,8 +585,12 @@ impl Computer {
             }
             Instruction::BPL(am) => {
                 if let AddressingMode::Relative = am {
-                    let boundary_crossed = self.branch_if(self.cpu.p.n == false);
+                    let condition = self.cpu.p.n == false;
+                    let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    if condition == true {
                         num_ticks += 1;
                     }
                 } else {
@@ -579,8 +630,12 @@ impl Computer {
             }
             Instruction::BVC(am) => {
                 if let AddressingMode::Relative = am {
-                    let boundary_crossed = self.branch_if(self.cpu.p.v == false);
+                    let condition = self.cpu.p.v == false;
+                    let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    if condition == true {
                         num_ticks += 1;
                     }
                 } else {
@@ -589,8 +644,12 @@ impl Computer {
             }
             Instruction::BVS(am) => {
                 if let AddressingMode::Relative = am {
-                    let boundary_crossed = self.branch_if(self.cpu.p.v == true);
+                    let condition = self.cpu.p.v == true;
+                    let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
+                        num_ticks += 1;
+                    }
+                    if condition == true {
                         num_ticks += 1;
                     }
                 } else {
@@ -1046,12 +1105,11 @@ impl Computer {
                     // bits 4 and 5 are ignored
                     let p = self.pop_stack() & 0b1100_1111;
                     self.cpu.p.set_from_byte(p);
-                    
+
                     let lo = self.pop_stack();
                     let hi = self.pop_stack();
                     let address = (u16::from(hi) << 8) + u16::from(lo);
                     self.cpu.pc = address;
-
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
