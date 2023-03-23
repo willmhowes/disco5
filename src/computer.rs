@@ -351,7 +351,7 @@ impl Computer {
     /// returns whether or not a page was crossed
     fn branch_if(&mut self, condition: bool) -> bool {
         let offset = fetch_instruction(&self.memory, &mut self.cpu);
-        let offset: i8 = offset as i8;
+        let offset: i16 = i16::from(offset as i8);
         let mut negative = false;
         if offset.is_negative() {
             negative = true;
