@@ -31,6 +31,16 @@ impl CPU {
     pub fn set_address_bus(&mut self, data: u16) {
         self.address_bus = data;
     }
+
+    pub fn print_state(&self) {
+        println!("--------------------");
+        println!("A  = {}, X = {}, Y = {}", self.a, self.x, self.y);
+        println!("P  = NV_BDIZC");
+        println!("     {:0>8b}", self.p.to_byte());
+        println!("PC = {}", self.pc);
+        println!("SP = {}", self.sp);
+        println!("--------------------");
+    }
 }
 
 #[derive(Copy, Clone, Default, Debug)]
