@@ -1,23 +1,5 @@
 use disco5::computer::*;
 
-fn byte_dump(memory: &[u8], line_count: u16) {
-    let mut i = 0;
-    let mut line_count = line_count;
-    for byte in memory {
-        if i == 0 {
-            print!("{line_count:0>7x} :");
-        }
-        if i < 15 {
-            print!(" {byte:0>2x}");
-            i += 1;
-        } else {
-            println!(" {byte:0>2x}");
-            i = 0;
-            line_count += 16;
-        }
-    }
-}
-
 #[test]
 fn countdown_program() {
     let mut computer: Computer = Default::default();
