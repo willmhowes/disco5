@@ -2,7 +2,6 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
-use std::{thread, time};
 
 pub mod cpu;
 pub mod opcode_map;
@@ -203,7 +202,7 @@ impl Computer {
             };
 
             // Write instructions to memory
-            println!("LINE : {}", cpu.pc);
+            println!("WRITING TO LINE {}", cpu.pc);
             for hex in &hexdump[1..] {
                 memory[usize::from(loc)] = u8::from_str_radix(hex, 16).unwrap();
                 loc += 1;
@@ -213,8 +212,13 @@ impl Computer {
         Ok(())
     }
 
-    pub fn load_program_from_hex(&mut self, filename: &str) -> io::Result<()> {
-        let memory = &mut self.memory;
+    pub fn load_program_from_hex(
+        &mut self,
+        filename: &str,
+        memory_entry_point: usize,
+        pc: u16,
+    ) -> io::Result<()> {
+        let memory = &mut self.memory[memory_entry_point..];
         let cpu = &mut self.cpu;
 
         // Load file contents into memory array
@@ -223,28 +227,34 @@ impl Computer {
         let bytes_read = f.read(memory)?;
         println!("{bytes_read} bytes read");
 
-        cpu.pc = 0x400;
+        cpu.pc = pc;
 
         Ok(())
     }
 
-    pub fn run_program(&mut self, loud: bool) {
-        while usize::from(self.cpu.pc) < self.memory.len() {
-            let mut line = String::new();
-            // let b1 = std::io::stdin().read_line(&mut line).unwrap();
+    pub fn run_program(&mut self, loud: bool, exit_condition: fn(u16) -> bool) {
+        loop {
+
+            if loud {
+                println!("--------------------");
+                println!("Clock = {}", self.clock);
+                self.cpu.print_state();
+            }
             let instruction = fetch_instruction(&self.memory, &mut self.cpu);
             let (instruction, minimum_ticks) = map_byte_to_instruction(instruction);
             if loud {
-                if let Instruction::BRK(AddressingMode::Implied) = instruction {
-                    break;
-                } else {
-                    println!("Clock = {}", self.clock);
-                    println!("{:?}, {:?} ticks", instruction, minimum_ticks);
-                }
+                println!("NEXT: {:?}, minimum {:?} ticks", instruction, minimum_ticks);
+                println!("--------------------");
             }
+            // let mut line = String::new();
+            // let b1 = std::io::stdin().read_line(&mut line).unwrap();
             self.process_instruction(instruction, minimum_ticks);
-            if loud {
-                self.cpu.print_state();
+
+            if exit_condition(self.cpu.pc) == true {
+                println!("SUCCESS");
+                println!("CLOCK = {}", self.clock);
+                println!("PC    = 0x{:0>4x}", self.cpu.pc);
+                break;
             }
         }
     }
@@ -524,9 +534,6 @@ impl Computer {
             }
             Instruction::BEQ(am) => {
                 if let AddressingMode::Relative = am {
-                    println!("----------");
-                    println!("INSIDE BEQ RELATIVE");
-                    println!("----------");
                     let condition = self.cpu.p.z == true;
                     let boundary_crossed = self.branch_if(condition);
                     if boundary_crossed == true {
