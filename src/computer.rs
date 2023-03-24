@@ -1189,7 +1189,7 @@ impl Computer {
                 _ => panic!("Attempted to execute instruction with invalid AddressingMode"),
             },
             Instruction::STX(am) => match am {
-                AddressingMode::Absolute | AddressingMode::ZeroPage | AddressingMode::ZeroPageX => {
+                AddressingMode::Absolute | AddressingMode::ZeroPage | AddressingMode::ZeroPageY => {
                     let (address, boundary_crossed) = self.resolve_address_fetch(am);
                     if boundary_crossed == true {
                         num_ticks += 1;
