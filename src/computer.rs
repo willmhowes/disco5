@@ -1085,7 +1085,7 @@ impl Computer {
                     }
                     AddressingMode::Accumulator => {
                         let tail = self.cpu.p.c;
-                        self.cpu.p.c = if self.cpu.a & 0x10 == 0x10 {
+                        self.cpu.p.c = if self.cpu.a & 0x01 == 0x01 {
                             true
                         } else {
                             false
