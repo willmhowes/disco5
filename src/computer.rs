@@ -406,8 +406,8 @@ impl Computer {
     }
 
     fn pop_stack(&mut self) -> u8 {
-        let address = (0x01 << 8) + u16::from(self.cpu.sp);
         self.cpu.sp = self.cpu.sp.wrapping_add(1);
+        let address = (u16::from(0x01_u8) << 8) + u16::from(self.cpu.sp);
         self.memory[usize::from(address)]
     }
 
