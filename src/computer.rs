@@ -400,7 +400,7 @@ impl Computer {
     }
 
     fn push_stack(&mut self, byte: u8) {
-        let address = (0x01 << 8) + u16::from(self.cpu.sp);
+        let address = (u16::from(0x01_u8) << 8) + u16::from(self.cpu.sp);
         self.memory[usize::from(address)] = byte;
         self.cpu.sp = self.cpu.sp.wrapping_sub(1);
     }
