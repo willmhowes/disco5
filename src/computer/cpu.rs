@@ -33,13 +33,13 @@ impl CPU {
     }
 
     pub fn print_state(&self) {
-        println!("--------------------");
-        println!("A  = {}, X = {}, Y = {}", self.a, self.x, self.y);
-        println!("P  = NV_BDIZC");
-        println!("     {:0>8b}", self.p.to_byte());
-        println!("PC = {}", self.pc);
+        // println!("--------------------");
+        println!("A  = 0b{:0>8b}, X = {}, Y = {}", self.a, self.x, self.y);
+        println!("P  =   NV_BDIZC");
+        println!("     0b{:0>8b}", self.p.to_byte());
+        println!("PC = 0x{:0>4x}", self.pc);
         println!("SP = {}", self.sp);
-        println!("--------------------");
+        // println!("--------------------");
     }
 }
 
