@@ -363,7 +363,11 @@ impl Computer {
         let carry = if self.cpu.p.c == true { 1 } else { 0 };
         let result = addend_1.wrapping_add(addend_2).wrapping_add(carry);
         self.cpu.a = result;
-        self.cpu.p.c = if addend_1 >= result { true } else { false };
+        self.cpu.p.c = if u16::from(addend_1) + u16::from(addend_2) + u16::from(carry) > 255 {
+            true
+        } else {
+            false
+        };
         self.cpu.p.v = if (addend_1 ^ result) & (addend_2 ^ result) & 0x80 == 0x00 {
             false
         } else {
