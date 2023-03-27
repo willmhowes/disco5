@@ -1,4 +1,137 @@
-use crate::computer::{AddressingMode, Instruction};
+#[derive(Debug, Copy, Clone)]
+pub enum AddressingMode {
+    Accumulator,
+    Absolute,
+    AbsoluteX,
+    AbsoluteY,
+    Immediate,
+    Implied,
+    Indirect,
+    IndirectX,
+    IndirectY,
+    Relative,
+    ZeroPage,
+    ZeroPageX,
+    ZeroPageY,
+}
+
+#[derive(Debug, Default)]
+pub enum Instruction {
+    /// add with carry
+    ADC(AddressingMode),
+    /// and (with accumulator)
+    AND(AddressingMode),
+    /// arithmetic shift left
+    ASL(AddressingMode),
+    /// branch on carry clear
+    BCC(AddressingMode),
+    /// branch on carry set
+    BCS(AddressingMode),
+    /// branch on equal (zero set)
+    BEQ(AddressingMode),
+    /// bit test
+    BIT(AddressingMode),
+    /// branch on minus (negative set)
+    BMI(AddressingMode),
+    /// branch on not equal (zero clear)
+    BNE(AddressingMode),
+    /// branch on plus (negative clear)
+    BPL(AddressingMode),
+    /// break / interrupt
+    BRK(AddressingMode),
+    /// branch on overflow clear
+    BVC(AddressingMode),
+    /// branch on overflow set
+    BVS(AddressingMode),
+    /// clear carry
+    CLC(AddressingMode),
+    /// clear decimal
+    CLD(AddressingMode),
+    /// clear interrupt disable
+    CLI(AddressingMode),
+    /// clear overflow
+    CLV(AddressingMode),
+    /// compare (with accumulator)
+    CMP(AddressingMode),
+    /// compare with X
+    CPX(AddressingMode),
+    /// compare with Y
+    CPY(AddressingMode),
+    /// decrement
+    DEC(AddressingMode),
+    /// decrement X
+    DEX(AddressingMode),
+    /// decrement Y
+    DEY(AddressingMode),
+    /// exclusive or (with accumulator)
+    EOR(AddressingMode),
+    /// increment
+    INC(AddressingMode),
+    /// increment X
+    INX(AddressingMode),
+    /// increment Y
+    INY(AddressingMode),
+    /// jump
+    JMP(AddressingMode),
+    /// jump subroutine
+    JSR(AddressingMode),
+    /// load accumulator
+    LDA(AddressingMode),
+    /// load X
+    LDX(AddressingMode),
+    /// load Y
+    LDY(AddressingMode),
+    /// logical shift right
+    LSR(AddressingMode),
+    /// no operation
+    NOP(AddressingMode),
+    /// or with accumulator
+    ORA(AddressingMode),
+    /// push accumulator
+    PHA(AddressingMode),
+    /// push processor status (SR)
+    PHP(AddressingMode),
+    /// pull accumulator
+    PLA(AddressingMode),
+    /// pull processor status (SR)
+    PLP(AddressingMode),
+    /// rotate left
+    ROL(AddressingMode),
+    /// rotate right
+    ROR(AddressingMode),
+    /// return from interrupt
+    RTI(AddressingMode),
+    /// return from subroutine
+    RTS(AddressingMode),
+    /// subtract with carry
+    SBC(AddressingMode),
+    /// set carry
+    SEC(AddressingMode),
+    /// set decimal
+    SED(AddressingMode),
+    /// set interrupt disable
+    SEI(AddressingMode),
+    /// store accumulator
+    STA(AddressingMode),
+    /// store X
+    STX(AddressingMode),
+    /// store Y
+    STY(AddressingMode),
+    /// transfer accumulator to X
+    TAX(AddressingMode),
+    /// transfer accumulator to Y
+    TAY(AddressingMode),
+    /// transfer stack pointer to X
+    TSX(AddressingMode),
+    /// transfer X to accumulator
+    TXA(AddressingMode),
+    /// transfer X to stack pointer
+    TXS(AddressingMode),
+    /// transfer Y to accumulator
+    TYA(AddressingMode),
+    #[default]
+    Invalid,
+}
 
 pub fn map_byte_to_instruction(byte: u8) -> (Instruction, u8) {
     match byte {
