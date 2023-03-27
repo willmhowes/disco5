@@ -8,9 +8,9 @@ pub mod cpu;
 pub mod cpu_structs;
 pub mod ppu;
 
-use crate::computer::bus::*;
-use crate::computer::cpu::*;
-use crate::computer::cpu_structs::{map_byte_to_instruction};
+use crate::computer::bus::Bus;
+use crate::computer::cpu::{StatusRegister, CPU};
+use crate::computer::cpu_structs::map_byte_to_instruction;
 
 #[derive(Debug)]
 pub struct Computer {

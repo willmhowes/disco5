@@ -1,5 +1,5 @@
+use crate::computer::bus::Bus;
 use crate::computer::cpu_structs::{AddressingMode, Instruction};
-use crate::computer::bus::{Bus};
 
 /// Type for storing CPU registers as fields
 #[derive(Copy, Clone, Default, Debug)]
@@ -46,7 +46,6 @@ impl CPU {
         self.step_pc();
         memory[index as usize]
     }
-
 
     /// returns the address and whether or not a page was crossed
     pub fn resolve_address_fetch(&mut self, am: AddressingMode, memory: &Bus) -> (u16, bool) {
@@ -151,7 +150,6 @@ impl CPU {
         }
     }
 
-
     fn set_status_nz(&mut self, test_val: u8) {
         self.p.z = if test_val == 0 { true } else { false };
         // 0x80 = 0b1000_0000 (i.e. a negative number under two-complement encoding)
@@ -211,7 +209,12 @@ impl CPU {
         memory[usize::from(address)]
     }
 
-    pub fn process_instruction(&mut self, instruction: Instruction, minimum_ticks: u8, memory: &mut Bus) -> u8 {
+    pub fn process_instruction(
+        &mut self,
+        instruction: Instruction,
+        minimum_ticks: u8,
+        memory: &mut Bus,
+    ) -> u8 {
         let mut num_ticks: u8 = minimum_ticks;
         match instruction {
             Instruction::ADC(am) => match am {
@@ -280,11 +283,7 @@ impl CPU {
                         }
                     }
                     AddressingMode::Accumulator => {
-                        self.p.c = if self.a & 0x80 == 0x80 {
-                            true
-                        } else {
-                            false
-                        };
+                        self.p.c = if self.a & 0x80 == 0x80 { true } else { false };
                         self.a = self.a << 1;
                         shift_result = self.a;
                     }
@@ -744,11 +743,7 @@ impl CPU {
                         memory[usize::from(address)] = shift_result;
                     }
                     AddressingMode::Accumulator => {
-                        self.p.c = if self.a & 0x01 == 0x01 {
-                            true
-                        } else {
-                            false
-                        };
+                        self.p.c = if self.a & 0x01 == 0x01 { true } else { false };
                         self.a = self.a >> 1;
                         shift_result = self.a;
                     }
@@ -843,17 +838,9 @@ impl CPU {
                     }
                     AddressingMode::Accumulator => {
                         let tail = self.p.c;
-                        self.p.c = if self.a & 0x80 == 0x80 {
-                            true
-                        } else {
-                            false
-                        };
+                        self.p.c = if self.a & 0x80 == 0x80 { true } else { false };
                         self.a = self.a << 1;
-                        self.a = if tail == true {
-                            self.a | 0x01
-                        } else {
-                            self.a
-                        };
+                        self.a = if tail == true { self.a | 0x01 } else { self.a };
                         shift_result = self.a;
                     }
                     _ => {
@@ -882,17 +869,9 @@ impl CPU {
                     }
                     AddressingMode::Accumulator => {
                         let tail = self.p.c;
-                        self.p.c = if self.a & 0x01 == 0x01 {
-                            true
-                        } else {
-                            false
-                        };
+                        self.p.c = if self.a & 0x01 == 0x01 { true } else { false };
                         self.a = self.a >> 1;
-                        self.a = if tail == true {
-                            self.a | 0x80
-                        } else {
-                            self.a
-                        };
+                        self.a = if tail == true { self.a | 0x80 } else { self.a };
                         shift_result = self.a;
                     }
                     _ => {

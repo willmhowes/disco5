@@ -342,6 +342,6 @@ pub fn map_byte_to_instruction(byte: u8) -> (Instruction, u8) {
 
         0x98 => (Instruction::TYA(AddressingMode::Implied), 2),
 
-        _ => (Instruction::Invalid,0),
+        _ => (Instruction::Invalid, 0),
     }
 }
