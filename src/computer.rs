@@ -5,11 +5,11 @@ use std::io::{self, BufReader};
 
 pub mod cpu;
 pub mod opcode_map;
+pub mod bus;
 
 use crate::computer::cpu::*;
+use crate::computer::bus::*;
 use crate::computer::opcode_map::map_byte_to_instruction;
-
-const MEMORY_SIZE: usize = 0x10000;
 
 #[derive(Debug, Copy, Clone)]
 pub enum AddressingMode {
@@ -147,7 +147,7 @@ pub enum Instruction {
 }
 
 /// loads instruction at address of pc, increments pc
-fn fetch_instruction(memory: &[u8], cpu: &mut CPU) -> u8 {
+fn fetch_instruction(memory: &Bus, cpu: &mut CPU) -> u8 {
     let index = cpu.pc;
     cpu.step_pc();
     memory[index as usize]
@@ -156,7 +156,7 @@ fn fetch_instruction(memory: &[u8], cpu: &mut CPU) -> u8 {
 #[derive(Debug)]
 pub struct Computer {
     pub cpu: CPU,
-    pub memory: [u8; MEMORY_SIZE],
+    pub memory: Bus,
     pub flags: StatusRegister,
     pub clock: u64,
 }
@@ -167,7 +167,7 @@ impl Default for Computer {
             cpu: CPU {
                 ..Default::default()
             },
-            memory: [0; MEMORY_SIZE],
+            memory: Default::default(),
             flags: Default::default(),
             clock: Default::default(),
         }
@@ -218,7 +218,7 @@ impl Computer {
         memory_entry_point: usize,
         pc: u16,
     ) -> io::Result<()> {
-        let memory = &mut self.memory[memory_entry_point..];
+        let memory = &mut self.memory.bytes[memory_entry_point..];
         let cpu = &mut self.cpu;
 
         // Load file contents into memory array

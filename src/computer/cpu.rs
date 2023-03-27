@@ -19,19 +19,9 @@ pub struct CPU {
     pub irq: bool,
     /// non-maskable interrupt pin
     pub nmi: bool,
-    pub data_bus: u8,
-    pub address_bus: u16,
 }
 
 impl CPU {
-    pub fn set_data_bus(&mut self, data: u8) {
-        self.data_bus = data;
-    }
-
-    pub fn set_address_bus(&mut self, data: u16) {
-        self.address_bus = data;
-    }
-
     pub fn print_state(&self) {
         // println!("--------------------");
         println!("A  = 0b{:0>8b}, X = {}, Y = {}", self.a, self.x, self.y);
