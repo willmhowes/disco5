@@ -22,9 +22,14 @@ pub struct CPU {
     pub irq: bool,
     /// non-maskable interrupt pin
     pub nmi: bool,
+    pub clock: u64,
 }
 
 impl CPU {
+    pub fn tick(&mut self, num: u8) {
+        self.clock += u64::from(num);
+    }
+
     pub fn print_state(&self) {
         // println!("--------------------");
         println!("A  = 0b{:0>8b}, X = {}, Y = {}", self.a, self.x, self.y);
@@ -49,105 +54,121 @@ impl CPU {
 
     /// returns the address and whether or not a page was crossed
     pub fn resolve_address_fetch(&mut self, am: AddressingMode, memory: &Bus) -> (u16, bool) {
-        match am {
-            AddressingMode::Accumulator
-            | AddressingMode::Implied
-            | AddressingMode::Immediate
-            | AddressingMode::Relative => {
-                panic!("Attempted to fetch an AddressingMode that is intended to be handled on a per instruction basis")
-            }
-            AddressingMode::Absolute => {
-                let lo = self.fetch_instruction(memory);
-                let hi = self.fetch_instruction(memory);
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                (address, false)
-            }
-            AddressingMode::AbsoluteX => {
-                let lo = self.fetch_instruction(memory);
-                let hi = self.fetch_instruction(memory);
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                let address_plus_x = address.wrapping_add(u16::from(self.x));
-                // bitmask the high 8 bits and compare. If they are different,
-                // then a page boundary has been crossed
-                let boundary_crossed = (address & 0xff00) != (address_plus_x & 0xff00);
-                (address_plus_x, boundary_crossed)
-            }
-            AddressingMode::AbsoluteY => {
-                let lo = self.fetch_instruction(memory);
-                let hi = self.fetch_instruction(memory);
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                let address_plus_y = address.wrapping_add(u16::from(self.y));
-                // bitmask the high 8 bits and compare. If they are different,
-                // then a page boundary has been crossed
-                let boundary_crossed = (address & 0xff00) != (address_plus_y & 0xff00);
-                (address_plus_y, boundary_crossed)
-            }
-            AddressingMode::Indirect => {
-                let lo = self.fetch_instruction(memory);
-                let hi = self.fetch_instruction(memory);
-                let address = (u16::from(hi) << 8) + u16::from(lo);
+        let output = {
+            match am {
+                AddressingMode::Accumulator
+                | AddressingMode::Implied
+                | AddressingMode::Immediate
+                | AddressingMode::Relative => {
+                    panic!("Attempted to fetch an AddressingMode that is intended to be handled on a per instruction basis")
+                }
+                AddressingMode::Absolute => {
+                    let lo = self.fetch_instruction(memory);
+                    let hi = self.fetch_instruction(memory);
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    (address, false)
+                }
+                AddressingMode::AbsoluteX => {
+                    let lo = self.fetch_instruction(memory);
+                    let hi = self.fetch_instruction(memory);
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    let address_plus_x = address.wrapping_add(u16::from(self.x));
+                    // bitmask the high 8 bits and compare. If they are different,
+                    // then a page boundary has been crossed
+                    let boundary_crossed = (address & 0xff00) != (address_plus_x & 0xff00);
+                    (address_plus_x, boundary_crossed)
+                }
+                AddressingMode::AbsoluteY => {
+                    let lo = self.fetch_instruction(memory);
+                    let hi = self.fetch_instruction(memory);
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    let address_plus_y = address.wrapping_add(u16::from(self.y));
+                    // bitmask the high 8 bits and compare. If they are different,
+                    // then a page boundary has been crossed
+                    let boundary_crossed = (address & 0xff00) != (address_plus_y & 0xff00);
+                    (address_plus_y, boundary_crossed)
+                }
+                AddressingMode::Indirect => {
+                    let lo = self.fetch_instruction(memory);
+                    let hi = self.fetch_instruction(memory);
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
 
-                let lo = memory[usize::from(address)];
-                // The indirect jump instruction does not increment the page
-                // address when the indirect pointer crosses a page boundary.
-                // JMP ($xxFF) will fetch the address from $xxFF and $xx00.
-                // https://www.pagetable.com/c64ref/6502/?tab=3
-                let address = if address & 0x00ff == 0x00ff {
-                    address & 0xff00
-                } else {
-                    address + 1
-                };
-                let hi = memory[usize::from(address)];
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                (address, false)
-            }
-            AddressingMode::IndirectX => {
-                let zpg = self.fetch_instruction(memory);
-                let lo = zpg.wrapping_add(self.x);
-                let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 8) + u16::from(lo);
+                    let lo = memory[usize::from(address)];
+                    // The indirect jump instruction does not increment the page
+                    // address when the indirect pointer crosses a page boundary.
+                    // JMP ($xxFF) will fetch the address from $xxFF and $xx00.
+                    // https://www.pagetable.com/c64ref/6502/?tab=3
+                    let address = if address & 0x00ff == 0x00ff {
+                        address & 0xff00
+                    } else {
+                        address + 1
+                    };
+                    let hi = memory[usize::from(address)];
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    (address, false)
+                }
+                AddressingMode::IndirectX => {
+                    let zpg = self.fetch_instruction(memory);
+                    let lo = zpg.wrapping_add(self.x);
+                    let hi: u8 = 0x00;
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
 
-                let lo = memory[usize::from(address)];
-                // IndirectX wraps around the zeropage
-                let hi = memory[usize::from(address + 1) % 256];
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                (address, false)
-            }
-            AddressingMode::IndirectY => {
-                let lo = self.fetch_instruction(memory);
-                let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 8) + u16::from(lo);
+                    let lo = memory[usize::from(address)];
+                    // IndirectX wraps around the zeropage
+                    let hi = memory[usize::from(address + 1) % 256];
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    (address, false)
+                }
+                AddressingMode::IndirectY => {
+                    let lo = self.fetch_instruction(memory);
+                    let hi: u8 = 0x00;
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
 
-                let lo = memory[usize::from(address)];
-                let hi = memory[usize::from(address.wrapping_add(1))];
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                let address_plus_y = address.wrapping_add(u16::from(self.y));
-                // bitmask the high 8 bits and compare. If they are different,
-                // then a page boundary has been crossed
-                let boundary_crossed = (address & 0xff00) != (address_plus_y & 0xff00);
-                (address_plus_y, boundary_crossed)
+                    let lo = memory[usize::from(address)];
+                    let hi = memory[usize::from(address.wrapping_add(1))];
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    let address_plus_y = address.wrapping_add(u16::from(self.y));
+                    // bitmask the high 8 bits and compare. If they are different,
+                    // then a page boundary has been crossed
+                    let boundary_crossed = (address & 0xff00) != (address_plus_y & 0xff00);
+                    (address_plus_y, boundary_crossed)
+                }
+                AddressingMode::ZeroPage => {
+                    let lo = self.fetch_instruction(memory);
+                    let hi: u8 = 0x00;
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    (address, false)
+                }
+                AddressingMode::ZeroPageX => {
+                    let zpg = self.fetch_instruction(memory);
+                    let lo = zpg.wrapping_add(self.x);
+                    let hi: u8 = 0x00;
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    (address, false)
+                }
+                AddressingMode::ZeroPageY => {
+                    let zpg = self.fetch_instruction(memory);
+                    let lo = zpg.wrapping_add(self.y);
+                    let hi: u8 = 0x00;
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    (address, false)
+                }
             }
-            AddressingMode::ZeroPage => {
-                let lo = self.fetch_instruction(memory);
-                let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                (address, false)
-            }
-            AddressingMode::ZeroPageX => {
-                let zpg = self.fetch_instruction(memory);
-                let lo = zpg.wrapping_add(self.x);
-                let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                (address, false)
-            }
-            AddressingMode::ZeroPageY => {
-                let zpg = self.fetch_instruction(memory);
-                let lo = zpg.wrapping_add(self.y);
-                let hi: u8 = 0x00;
-                let address = (u16::from(hi) << 8) + u16::from(lo);
-                (address, false)
-            }
+        };
+        if (output.0 == 0x2000
+            || output.0 == 0x2001
+            || output.0 == 0x2002
+            || output.0 == 0x2003
+            || output.0 == 0x2004
+            || output.0 == 0x2005
+            || output.0 == 0x2006
+            || output.0 == 0x2007)
+        {
+            println!("HIT PPU REGISTER = 0x{:x}", output.0);
+            let mut line = String::new();
+            let b1 = std::io::stdin().read_line(&mut line).unwrap();
         }
+        output
     }
 
     fn set_status_nz(&mut self, test_val: u8) {
@@ -1031,8 +1052,12 @@ impl CPU {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
-            Instruction::Invalid => panic!("Attempted to execute invalid instruction"),
+            Instruction::Invalid(byte) => panic!(
+                "Attempted to execute undocumented instruction : 0x{:x}",
+                byte
+            ),
         }
+        self.tick(num_ticks);
         num_ticks
     }
 }
