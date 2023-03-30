@@ -21,8 +21,7 @@ const CPU_CYCLES_PER_FRAME: f64 = 29780.5;
 #[derive(Debug, Default)]
 pub struct Computer {
     pub cpu: CPU,
-    pub ppu: PPU,
-    pub memory: Bus,
+    pub address_space: Bus,
     pub flags: StatusRegister,
     pub clock: u64,
 }
@@ -51,7 +50,7 @@ impl Computer {
     }
 
     pub fn load_program(&mut self, filename: &str) -> io::Result<()> {
-        let memory = &mut self.memory;
+        let memory = &mut self.address_space;
         let cpu = &mut self.cpu;
         // Load file contents into a buffer
         let f = File::open(filename)?;
@@ -89,7 +88,7 @@ impl Computer {
         memory_entry_point: usize,
         pc: u16,
     ) -> io::Result<()> {
-        let memory = &mut self.memory.bytes[memory_entry_point..];
+        let memory = &mut self.address_space.bytes[memory_entry_point..];
 
         // Load file contents into memory array
         let f = File::open(filename)?;
@@ -169,18 +168,19 @@ impl Computer {
         let mut f = BufReader::new(f);
         f.seek(SeekFrom::Start(16))?;
 
-        let cpu_memory_0 = &mut self.memory.bytes[memory_entry_point..memory_entry_point+0x4000];
+        let cpu_memory_0 = &mut self.address_space.bytes[memory_entry_point..memory_entry_point+0x4000];
         f.read_exact(cpu_memory_0)?;
 
         f.seek(SeekFrom::Start(16))?;
-        let cpu_memory_1 = &mut self.memory.bytes[memory_entry_point+0x4000..memory_entry_point+0x8000];
+        let cpu_memory_1 = &mut self.address_space.bytes[memory_entry_point+0x4000..memory_entry_point+0x8000];
         f.read_exact(cpu_memory_1)?;
 
-        let ppu_memory = &mut self.ppu.memory[..0x2000];
+        // This should be the only time the PPU's memory is directly addressed
+        let ppu_memory = &mut self.address_space.ppu.memory[..0x2000];
         f.read_exact(ppu_memory)?;
 
-        let lo = self.memory.bytes[0xfffc];
-        let hi = self.memory.bytes[0xfffd];
+        let lo = self.address_space.bytes[0xfffc];
+        let hi = self.address_space.bytes[0xfffd];
         let address = (u16::from(hi) << 8) + u16::from(lo);
 
         self.cpu.pc = address;
@@ -195,7 +195,7 @@ impl Computer {
                 println!("Clock = {}", self.cpu.clock);
                 self.cpu.print_state();
             }
-            let instruction = self.cpu.fetch_instruction(&self.memory);
+            let instruction = self.cpu.fetch_instruction(&self.address_space);
             let (instruction, minimum_ticks) = map_byte_to_instruction(instruction);
             if loud {
                 println!("NEXT: {:?}, minimum {:?} ticks", instruction, minimum_ticks);
@@ -205,7 +205,7 @@ impl Computer {
             // let b1 = std::io::stdin().read_line(&mut line).unwrap();
             let ticks = self
                 .cpu
-                .process_instruction(instruction, minimum_ticks, &mut self.memory);
+                .process_instruction(instruction, minimum_ticks, &mut self.address_space);
 
             // self.tick(ticks);
 

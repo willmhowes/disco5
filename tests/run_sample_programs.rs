@@ -9,7 +9,7 @@ fn countdown_program() {
         .unwrap(); // NOTE: verifies that program loaded without errors
 
     assert_eq!(
-        &computer.memory.bytes[600..616],
+        &computer.address_space.bytes[600..616],
         &[
             0xa2, 0x10, 0xa0, 0x0a, 0x94, 0x00, 0xe8, 0x88, 0xc0, 0x00, 0xd0, 0xf8, 0x00, 0x00,
             0x00, 0x00
@@ -20,7 +20,7 @@ fn countdown_program() {
     computer.run_program(false, closure);
 
     assert_eq!(
-        &computer.memory.bytes[16..32],
+        &computer.address_space.bytes[16..32],
         &[10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0]
     );
 }

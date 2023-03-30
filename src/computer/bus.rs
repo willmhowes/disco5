@@ -1,4 +1,4 @@
-use super::cpu::ReadWrite;
+use super::{cpu::ReadWrite, ppu::PPU};
 use std::ops::{Index, IndexMut};
 
 const CPU_MEMORY_SIZE: usize = 0x10000;
@@ -8,6 +8,7 @@ pub struct Bus {
     pub bytes: [u8; CPU_MEMORY_SIZE],
     pub data_bus: u8,
     pub address_bus: u16,
+    pub ppu: PPU,
 }
 
 impl Default for Bus {
@@ -16,6 +17,7 @@ impl Default for Bus {
             bytes: [0; CPU_MEMORY_SIZE],
             data_bus: Default::default(),
             address_bus: Default::default(),
+            ppu: Default::default(),
         }
     }
 }
