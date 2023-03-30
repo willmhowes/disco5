@@ -15,7 +15,7 @@ pub enum AddressingMode {
     ZeroPageY,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum Instruction {
     /// add with carry
     ADC(AddressingMode),
@@ -129,8 +129,7 @@ pub enum Instruction {
     TXS(AddressingMode),
     /// transfer Y to accumulator
     TYA(AddressingMode),
-    #[default]
-    Invalid,
+    Invalid(u8),
 }
 
 pub fn map_byte_to_instruction(byte: u8) -> (Instruction, u8) {
@@ -342,6 +341,6 @@ pub fn map_byte_to_instruction(byte: u8) -> (Instruction, u8) {
 
         0x98 => (Instruction::TYA(AddressingMode::Implied), 2),
 
-        _ => (Instruction::Invalid, 0),
+        _ => (Instruction::Invalid(byte), 0),
     }
 }
