@@ -1,7 +1,7 @@
 // #[allow(non_camel_case_types)]
 use std::fs::File;
-use std::io::prelude::*;
-use std::io::{self, BufReader};
+use std::io::{prelude::*};
+use std::io::{self, BufReader, SeekFrom};
 
 pub mod bus;
 pub mod cpu;
@@ -11,24 +11,36 @@ pub mod ppu;
 use crate::computer::bus::Bus;
 use crate::computer::cpu::{StatusRegister, CPU};
 use crate::computer::cpu_structs::map_byte_to_instruction;
+use crate::computer::ppu::PPU;
 
-#[derive(Debug)]
+const MASTER_CLOCKSPEED: u32 = 21_477_272;
+const PPU_CLOCKSPEED: u32 = MASTER_CLOCKSPEED / 4;
+const CPU_CLOCKSPEED: u32 = MASTER_CLOCKSPEED / 12;
+const CPU_CYCLES_PER_FRAME: f64 = 29780.5;
+
+#[derive(Debug, Default)]
 pub struct Computer {
     pub cpu: CPU,
+    pub ppu: PPU,
     pub memory: Bus,
     pub flags: StatusRegister,
     pub clock: u64,
 }
 
-impl Default for Computer {
-    fn default() -> Computer {
-        Computer {
-            cpu: CPU {
-                ..Default::default()
-            },
-            memory: Default::default(),
-            flags: Default::default(),
-            clock: Default::default(),
+fn byte_dump(memory: &[u8]) {
+    let mut i = 0;
+    let mut line_count = 0;
+    for byte in memory {
+        if i == 0 {
+            print!("{line_count:0>7x} :");
+        }
+        if i < 15 {
+            print!(" {byte:0>2x}");
+            i += 1;
+        } else {
+            println!(" {byte:0>2x}");
+            i = 0;
+            line_count += 16;
         }
     }
 }
@@ -78,7 +90,6 @@ impl Computer {
         pc: u16,
     ) -> io::Result<()> {
         let memory = &mut self.memory.bytes[memory_entry_point..];
-        let cpu = &mut self.cpu;
 
         // Load file contents into memory array
         let f = File::open(filename)?;
@@ -86,7 +97,93 @@ impl Computer {
         let bytes_read = f.read(memory)?;
         println!("{bytes_read} bytes read");
 
-        cpu.pc = pc;
+        self.cpu.pc = pc;
+
+        Ok(())
+    }
+
+    fn process_header(memory: &[u8]) {
+        println!("--------------------");
+        println!("| Header Bytes     |");
+        println!("--------------------");
+        println!(
+            "| 0   | {:0>8b}   | {}",
+            memory[0],
+            if memory[0] == 0x4e {
+                "valid"
+            } else {
+                "invalid"
+            }
+        );
+        println!(
+            "| 1   | {:0>8b}   | {}",
+            memory[1],
+            if memory[1] == 0x45 {
+                "valid"
+            } else {
+                "invalid"
+            }
+        );
+        println!(
+            "| 2   | {:0>8b}   | {}",
+            memory[2],
+            if memory[2] == 0x53 {
+                "valid"
+            } else {
+                "invalid"
+            }
+        );
+        println!(
+            "| 3   | {:0>8b}   | {}",
+            memory[3],
+            if memory[3] == 0x1a {
+                "valid"
+            } else {
+                "invalid"
+            }
+        );
+        println!("--------------------");
+        println!(
+            "| 4   | {:0>8b}   | PRG ROM = 16 KB * {}",
+            memory[4], memory[4]
+        );
+        println!(
+            "| 5   | {:0>8b}   | CHR ROM = 8 KB * {}",
+            memory[5], memory[5]
+        );
+        println!("--------------------");
+        println!("| 6   | {:0>8b}   |", memory[6]);
+        let six = format!("{:0>8b}", memory[6]);
+        let six = six.as_bytes();
+        println!("| 6.0 | {}   |", six[0] as char);
+        println!("--------------------");
+    }
+
+    pub fn load_nes_rom(
+        &mut self,
+        filename: &str,
+        memory_entry_point: usize,
+    ) -> io::Result<()> {
+        // Load file contents into memory array
+        let f = File::open(filename)?;
+        let mut f = BufReader::new(f);
+        f.seek(SeekFrom::Start(16))?;
+
+        let cpu_memory_0 = &mut self.memory.bytes[memory_entry_point..memory_entry_point+0x4000];
+        f.read_exact(cpu_memory_0)?;
+
+        f.seek(SeekFrom::Start(16))?;
+        let cpu_memory_1 = &mut self.memory.bytes[memory_entry_point+0x4000..memory_entry_point+0x8000];
+        f.read_exact(cpu_memory_1)?;
+
+        let ppu_memory = &mut self.ppu.memory[..0x2000];
+        f.read_exact(ppu_memory)?;
+
+        let lo = self.memory.bytes[0xfffc];
+        let hi = self.memory.bytes[0xfffd];
+        let address = (u16::from(hi) << 8) + u16::from(lo);
+
+        self.cpu.pc = address;
 
         Ok(())
     }
@@ -95,7 +192,7 @@ impl Computer {
         loop {
             if loud {
                 println!("--------------------");
-                println!("Clock = {}", self.clock);
+                println!("Clock = {}", self.cpu.clock);
                 self.cpu.print_state();
             }
             let instruction = self.cpu.fetch_instruction(&self.memory);
@@ -110,7 +207,7 @@ impl Computer {
                 .cpu
                 .process_instruction(instruction, minimum_ticks, &mut self.memory);
 
-            self.tick(ticks);
+            // self.tick(ticks);
 
             if exit_condition(self.cpu.pc) == true {
                 println!("SUCCESS");
