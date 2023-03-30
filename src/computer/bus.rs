@@ -1,11 +1,11 @@
 use super::cpu::ReadWrite;
 use std::ops::{Index, IndexMut};
 
-const MEMORY_SIZE: usize = 0x10000;
+const CPU_MEMORY_SIZE: usize = 0x10000;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Bus {
-    pub bytes: [u8; MEMORY_SIZE],
+    pub bytes: [u8; CPU_MEMORY_SIZE],
     pub data_bus: u8,
     pub address_bus: u16,
 }
@@ -13,7 +13,7 @@ pub struct Bus {
 impl Default for Bus {
     fn default() -> Bus {
         Bus {
-            bytes: [0; MEMORY_SIZE],
+            bytes: [0; CPU_MEMORY_SIZE],
             data_bus: Default::default(),
             address_bus: Default::default(),
         }
@@ -29,6 +29,8 @@ impl Index<usize> for Bus {
             // 0x2002 => todo!(),
             // 0x2004 => todo!(),
             // 0x2007 => todo!(),
+            // 0x4016 => todo!(),
+            // 0x4017 => todo!(),
             _ => &self.bytes[index],
         }
     }
@@ -45,6 +47,7 @@ impl IndexMut<usize> for Bus {
             // 0x2005 => todo!(),
             // 0x2006 => todo!(),
             // 0x4014 => todo!(),
+            // 0x4016 => todo!(),
             _ => &mut self.bytes[index],
         }
     }
