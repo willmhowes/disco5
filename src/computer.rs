@@ -1,18 +1,22 @@
+use core::time;
 // #[allow(non_camel_case_types)]
 use std::fs::File;
-use std::io::{prelude::*};
+use std::io::prelude::*;
 use std::io::{self, BufReader, SeekFrom};
+use std::thread;
+use std::time::Instant;
 
 pub mod bus;
 pub mod cpu;
 pub mod cpu_structs;
-pub mod ppu_structs;
 pub mod ppu;
+pub mod ppu_structs;
 
 use crate::computer::bus::Bus;
 use crate::computer::cpu::{StatusRegister, CPU};
 use crate::computer::cpu_structs::map_byte_to_instruction;
 use crate::computer::ppu::PPU;
+use crate::computer::ppu_structs::PPUCTRL;
 
 const MASTER_CLOCKSPEED: u32 = 21_477_272;
 const PPU_CLOCKSPEED: u32 = MASTER_CLOCKSPEED / 4;
@@ -159,21 +163,19 @@ impl Computer {
         println!("--------------------");
     }
 
-    pub fn load_nes_rom(
-        &mut self,
-        filename: &str,
-        memory_entry_point: usize,
-    ) -> io::Result<()> {
+    pub fn load_nes_rom(&mut self, filename: &str, memory_entry_point: usize) -> io::Result<()> {
         // Load file contents into memory array
         let f = File::open(filename)?;
         let mut f = BufReader::new(f);
         f.seek(SeekFrom::Start(16))?;
 
-        let cpu_memory_0 = &mut self.address_space.bytes[memory_entry_point..memory_entry_point+0x4000];
+        let cpu_memory_0 =
+            &mut self.address_space.bytes[memory_entry_point..memory_entry_point + 0x4000];
         f.read_exact(cpu_memory_0)?;
 
         f.seek(SeekFrom::Start(16))?;
-        let cpu_memory_1 = &mut self.address_space.bytes[memory_entry_point+0x4000..memory_entry_point+0x8000];
+        let cpu_memory_1 =
+            &mut self.address_space.bytes[memory_entry_point + 0x4000..memory_entry_point + 0x8000];
         f.read_exact(cpu_memory_1)?;
 
         // This should be the only time the PPU's memory is directly addressed
@@ -190,6 +192,19 @@ impl Computer {
     }
 
     pub fn run_program(&mut self, loud: bool, exit_condition: fn(u16) -> bool) {
+        const PPU_CYCLES_PER_SECOND: u64 = 5_369_316;
+        const PPU_SCANLINES_PER_FRAME: u64 = 262;
+        const PPU_CYCLES_PER_SCANLINES: u64 = 341;
+        const PPU_CYCLES_PER_FRAME: u64 = PPU_SCANLINES_PER_FRAME * PPU_CYCLES_PER_SCANLINES;
+
+        const CPU_CYCLES_PER_SECOND: u64 = 1_789_772;
+        const CPU_CYCLES_PER_FRAME: u64 = PPU_CYCLES_PER_FRAME / 3;
+        const LENGTH_OF_FRAME: f64 = 1.0 / 60.0;
+
+        let mut time_since_last_frame: u64 = 0;
+        let mut cpu_clockspeed_manager = Instant::now();
+        let mut ppu_clockspeed_manager = Instant::now();
+
         loop {
             if loud {
                 println!("--------------------");
@@ -202,19 +217,38 @@ impl Computer {
                 println!("NEXT: {:?}, minimum {:?} ticks", instruction, minimum_ticks);
                 println!("--------------------");
             }
-            // let mut line = String::new();
-            // let b1 = std::io::stdin().read_line(&mut line).unwrap();
-            let ticks = self
-                .cpu
-                .process_instruction(instruction, minimum_ticks, &mut self.address_space);
+
+            let ticks =
+                self.cpu
+                    .process_instruction(instruction, minimum_ticks, &mut self.address_space);
+            time_since_last_frame += u64::from(ticks);
+
+            if time_since_last_frame >= CPU_CYCLES_PER_FRAME {
+                let elapsed_time = cpu_clockspeed_manager.elapsed().as_secs_f64();
+                if elapsed_time < LENGTH_OF_FRAME {
+                    let time_to_sleep = time::Duration::from_secs_f64(LENGTH_OF_FRAME - elapsed_time);
+                    println!("---- SLEEPING ---- {:?}", time_to_sleep);
+                    thread::sleep(time_to_sleep);
+                }
+                time_since_last_frame = 0;
+                cpu_clockspeed_manager = Instant::now();
+
+                if self.address_space.ppu.ppu_ctrl & PPUCTRL::GEN_NMI.bits() == PPUCTRL::GEN_NMI.bits() {
+                    // update render
+                    // generate nmi
+                    // reset time_since_last_frame
+                    // allow however many cycles to occur before repeating nmi
+                }
+            }
+
 
             // if self.cpu.clock > 40_000 {
             //     // render the first frame baby
             //     self.address_space.ppu.render_frame();
 
             //     // stop once rendered
-            //     let mut line = String::new();
-            //     let b1 = std::io::stdin().read_line(&mut line).unwrap();
+            // let mut line = String::new();
+            // let b1 = std::io::stdin().read_line(&mut line).unwrap();
             // }
 
             // self.tick(ticks);
