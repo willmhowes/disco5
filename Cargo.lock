@@ -3,5 +3,14 @@
 version = 3
 
 [[package]]
+name = "bitflags"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c70beb79cbb5ce9c4f8e20849978f34225931f665bb49efa6982875a4d5facb3"
+
+[[package]]
 name = "disco5"
 version = "0.1.0"
+dependencies = [
+ "bitflags",
+]

@@ -6,6 +6,7 @@ use std::io::{self, BufReader, SeekFrom};
 pub mod bus;
 pub mod cpu;
 pub mod cpu_structs;
+pub mod ppu_structs;
 pub mod ppu;
 
 use crate::computer::bus::Bus;
@@ -206,6 +207,15 @@ impl Computer {
             let ticks = self
                 .cpu
                 .process_instruction(instruction, minimum_ticks, &mut self.address_space);
+
+            // if self.cpu.clock > 40_000 {
+            //     // render the first frame baby
+            //     self.address_space.ppu.render_frame();
+
+            //     // stop once rendered
+            //     let mut line = String::new();
+            //     let b1 = std::io::stdin().read_line(&mut line).unwrap();
+            // }
 
             // self.tick(ticks);
 
