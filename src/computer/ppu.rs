@@ -5,7 +5,7 @@ const OAM_SIZE: usize = 0x100;
 
 const FRAME_WIDTH: usize = 256;
 const FRAME_HEIGHT: usize = 240;
-const FRAME_BUFFER_SIZE: usize = FRAME_WIDTH * FRAME_HEIGHT;
+pub const FRAME_BUFFER_SIZE: usize = FRAME_WIDTH * FRAME_HEIGHT;
 
 const TILE_SIZE: usize = 8;
 const FRAME_WIDTH_IN_TILES: usize = FRAME_WIDTH / TILE_SIZE;
@@ -64,67 +64,67 @@ impl Default for PPU {
 }
 
 impl PPU {
-    pub fn increment_line_counter(&self) {
-        // let mut guard = self.line_counter.lock().unwrap();
-        // *guard +=1;
-        // drop(guard);
-    }
+    // pub fn increment_line_counter(&self) {
+    //     // let mut guard = self.line_counter.lock().unwrap();
+    //     // *guard +=1;
+    //     // drop(guard);
+    // }
 
-    /// VPHB SINN | NMI enable (V), PPU master/slave (P), sprite height (H), background tile select (B), sprite tile select (S), increment mode (I), nametable select (NN)
-    pub fn ppu_ctrl_write(&mut self, input: u8) {
-        todo!();
-    }
+    // /// VPHB SINN | NMI enable (V), PPU master/slave (P), sprite height (H), background tile select (B), sprite tile select (S), increment mode (I), nametable select (NN)
+    // pub fn ppu_ctrl_write(&mut self, input: u8) {
+    //     todo!();
+    // }
 
-    /// BGRs bMmG | color emphasis (BGR), sprite enable (s), background enable (b), sprite left column enable (M), background left column enable (m), greyscale (G)
-    pub fn ppu_mask_write(&mut self, input: u8) {
-        todo!();
-    }
+    // /// BGRs bMmG | color emphasis (BGR), sprite enable (s), background enable (b), sprite left column enable (M), background left column enable (m), greyscale (G)
+    // pub fn ppu_mask_write(&mut self, input: u8) {
+    //     todo!();
+    // }
 
-    /// VSO- ---- | vblank (V), sprite 0 hit (S), sprite overflow (O); read resets write pair for $2005/$2006
-    pub fn ppu_status_read(&self) -> &u8 {
-        self.increment_line_counter();
-        &0x80
-    }
+    // /// VSO- ---- | vblank (V), sprite 0 hit (S), sprite overflow (O); read resets write pair for $2005/$2006
+    // pub fn ppu_status_read(&self) -> &u8 {
+    //     self.increment_line_counter();
+    //     &0x80
+    // }
 
-    /// aaaa aaaa | OAM read/write address
-    pub fn oam_addr_write(&mut self, input: u8) {
-        todo!();
-    }
+    // /// aaaa aaaa | OAM read/write address
+    // pub fn oam_addr_write(&mut self, input: u8) {
+    //     todo!();
+    // }
 
-    /// dddd dddd | OAM data read/write
-    pub fn oam_data_read(&self) -> &u8 {
-        todo!();
-    }
+    // /// dddd dddd | OAM data read/write
+    // pub fn oam_data_read(&self) -> &u8 {
+    //     todo!();
+    // }
 
-    /// dddd dddd | OAM data read/write
-    pub fn oam_data_write(&mut self, input: u8) {
-        todo!();
-    }
+    // /// dddd dddd | OAM data read/write
+    // pub fn oam_data_write(&mut self, input: u8) {
+    //     todo!();
+    // }
 
-    /// xxxx xxxx | fine scroll position (two writes: X scroll, Y scroll)
-    pub fn ppu_scroll_write(&mut self, input: u8) {
-        todo!();
-    }
+    // /// xxxx xxxx | fine scroll position (two writes: X scroll, Y scroll)
+    // pub fn ppu_scroll_write(&mut self, input: u8) {
+    //     todo!();
+    // }
 
-    /// aaaa aaaa | PPU read/write address (two writes: most significant byte, least significant byte)
-    pub fn ppu_addr_write(&mut self, input: u8) {
-        todo!();
-    }
+    // /// aaaa aaaa | PPU read/write address (two writes: most significant byte, least significant byte)
+    // pub fn ppu_addr_write(&mut self, input: u8) {
+    //     todo!();
+    // }
 
-    /// dddd dddd | PPU data read/write
-    pub fn ppu_data_read(&self) -> &u8 {
-        todo!();
-    }
+    // /// dddd dddd | PPU data read/write
+    // pub fn ppu_data_read(&self) -> &u8 {
+    //     todo!();
+    // }
 
-    /// dddd dddd | PPU data read/write
-    pub fn ppu_data_write(&mut self, input: u8) {
-        todo!();
-    }
+    // /// dddd dddd | PPU data read/write
+    // pub fn ppu_data_write(&mut self, input: u8) {
+    //     todo!();
+    // }
 
-    /// OAM DMA high address
-    pub fn oam_dma_write(&mut self, input: u8) {
-        todo!();
-    }
+    // /// OAM DMA high address
+    // pub fn oam_dma_write(&mut self, input: u8) {
+    //     todo!();
+    // }
 
     // (X,Y) (256,240) (32,30)
     fn fetch_nametable_byte(&self) -> u8 {
@@ -231,13 +231,13 @@ impl PPU {
         }
     }
 
-    pub fn render_frame(&self) {
+    pub fn render_frame(&self) -> [(u8, u8, u8); FRAME_BUFFER_SIZE] {
         let mut frame_buffer: [(u8, u8, u8); FRAME_BUFFER_SIZE] = [(0, 0, 0); FRAME_BUFFER_SIZE];
         for i in 0..FRAME_HEIGHT {
             let line_ref = &mut frame_buffer[FRAME_WIDTH * i..FRAME_WIDTH * i + FRAME_WIDTH];
             self.render_line(line_ref);
         }
 
-        println!("{:?}", frame_buffer);
+        frame_buffer
     }
 }

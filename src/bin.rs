@@ -1,8 +1,7 @@
 use disco5::computer::*;
 use speedy2d::Window;
 
-#[test]
-fn test_nes_game() {
+fn main() {
     let mut computer: Computer = Default::default();
 
     computer
