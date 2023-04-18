@@ -23,6 +23,7 @@ pub struct CPU {
     /// non-maskable interrupt pin
     pub nmi: bool,
     pub clock: u64,
+    pub time_since_last_frame: u64,
 }
 
 impl CPU {
@@ -162,7 +163,7 @@ impl CPU {
         //     || output.0 == 0x2004
         //     || output.0 == 0x2005
         //     || output.0 == 0x2006
-        //     || output.0 == 0x2007
+        //     // || output.0 == 0x2007
         // {
         //     println!("HIT PPU REGISTER = 0x{:x}", output.0);
         //     let mut line = String::new();
@@ -1048,6 +1049,30 @@ impl CPU {
                 if let AddressingMode::Implied = am {
                     self.a = self.y;
                     self.set_status_nz(self.a);
+                } else {
+                    panic!("Attempted to execute instruction with invalid AddressingMode");
+                }
+            }
+            Instruction::NMI(am) => {
+                if let AddressingMode::Implied = am {
+                    let to_be_pushed = self.pc;
+                    let lo = to_be_pushed as u8;
+                    let hi = (to_be_pushed >> 8) as u8;
+                    self.push_stack(hi, memory);
+                    self.push_stack(lo, memory);
+
+                    let p = self.p.to_byte();
+
+                    self.push_stack(p, memory);
+
+                    // fetch address of NMI vector
+                    let lo = memory[0xfffa];
+                    let hi = memory[0xfffb];
+                    let address = (u16::from(hi) << 8) + u16::from(lo);
+                    self.pc = address;
+
+                    // set interrupt disable flag
+                    self.p.i = true;
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }

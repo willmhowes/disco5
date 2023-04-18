@@ -8,8 +8,9 @@ use std::time::Instant;
 
 // use speedy2d::color::Color;
 use speedy2d::image::{ImageDataType, ImageSmoothingMode};
+use speedy2d::shape::Rectangle;
 use speedy2d::window::{WindowHandler, WindowHelper};
-use speedy2d::{Graphics2D};
+use speedy2d::Graphics2D;
 
 pub mod bus;
 pub mod cpu;
@@ -19,7 +20,7 @@ pub mod ppu_structs;
 
 use crate::computer::bus::Bus;
 use crate::computer::cpu::{StatusRegister, CPU};
-use crate::computer::cpu_structs::map_byte_to_instruction;
+use crate::computer::cpu_structs::{map_byte_to_instruction, AddressingMode, Instruction};
 use crate::computer::ppu::FRAME_BUFFER_SIZE;
 use crate::computer::ppu_structs::PPUCTRL;
 
@@ -263,7 +264,6 @@ impl Computer {
 
 impl WindowHandler for Computer {
     fn on_draw(&mut self, helper: &mut WindowHelper, graphics: &mut Graphics2D) {
-        let mut time_since_last_frame: u64 = 0;
         let mut cpu_clockspeed_manager = Instant::now();
         loop {
             if LOUD {
@@ -277,13 +277,12 @@ impl WindowHandler for Computer {
                 println!("NEXT: {:?}, minimum {:?} ticks", instruction, minimum_ticks);
                 println!("--------------------");
             }
-
             let ticks =
                 self.cpu
                     .process_instruction(instruction, minimum_ticks, &mut self.address_space);
-            time_since_last_frame += u64::from(ticks);
+            self.cpu.time_since_last_frame += u64::from(ticks);
 
-            if time_since_last_frame >= CPU_CYCLES_PER_FRAME {
+            if self.cpu.time_since_last_frame >= CPU_CYCLES_PER_FRAME {
                 // TODO: Adjust how frame sleeping works, probably going to be end up sleeping
                 // for too long the way it currently is
                 let elapsed_time = cpu_clockspeed_manager.elapsed().as_secs_f64();
@@ -291,16 +290,20 @@ impl WindowHandler for Computer {
                 if elapsed_time < LENGTH_OF_FRAME {
                     let time_to_sleep =
                         time::Duration::from_secs_f64(LENGTH_OF_FRAME - elapsed_time);
-                        // time::Duration::from_secs_f64(2.0);
+                    // time::Duration::from_secs_f64(2.0);
                     println!("---- SLEEPING FOR {:?} ----", time_to_sleep);
                     thread::sleep(time_to_sleep);
                 }
-                time_since_last_frame = 0;
+                self.cpu.time_since_last_frame = 0;
                 cpu_clockspeed_manager = Instant::now();
 
                 if self.address_space.ppu.ppu_ctrl & PPUCTRL::GEN_NMI.bits()
                     == PPUCTRL::GEN_NMI.bits()
                 {
+                    // pause when entering NMI
+                    let mut line = String::new();
+                    let b1 = std::io::stdin().read_line(&mut line).unwrap();
+
                     // update render
                     // graphics.draw_circle((100.0, 100.0), 75.0, Color::BLUE);
                     let buffer: [(u8, u8, u8); FRAME_BUFFER_SIZE] =
@@ -318,19 +321,26 @@ impl WindowHandler for Computer {
                         j += 1;
                     }
 
-                    let frame = graphics.create_image_from_raw_pixels(
-                        ImageDataType::RGB,
-                        ImageSmoothingMode::NearestNeighbor,
-                        (256, 240),
-                        &new_buffer,
-                    ).unwrap();
+                    let frame = graphics
+                        .create_image_from_raw_pixels(
+                            ImageDataType::RGB,
+                            ImageSmoothingMode::NearestNeighbor,
+                            (256, 240),
+                            &new_buffer,
+                        )
+                        .unwrap();
 
-                    graphics.draw_image((0.0,0.0), &frame);
+                    // graphics.draw_image((0.0,0.0), &frame);
+                    graphics.draw_rectangle_image(
+                        Rectangle::from_tuples((0.0, 0.0), (512.0, 480.0)),
+                        &frame,
+                    );
 
-                    // Request that we draw another frame once this one has finished
-                    // generate nmi
-                    // reset time_since_last_frame
-                    // allow however many cycles to occur before repeating nmi
+                    let instruction = Instruction::NMI(AddressingMode::Implied);
+                    let ticks =
+                        self.cpu
+                            .process_instruction(instruction, 7, &mut self.address_space);
+                    self.cpu.time_since_last_frame += u64::from(ticks);
                     break;
                 }
             }
