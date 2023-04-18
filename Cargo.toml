@@ -10,7 +10,7 @@ name = "disco5"
 path = "src/lib.rs"
 
 [[bin]]
-name = "mybin"
+name = "Disco5"
 path = "src/bin.rs"
 
 [dependencies]

@@ -6,7 +6,6 @@ use std::io::{self, BufReader, SeekFrom};
 use std::thread;
 use std::time::Instant;
 
-// use speedy2d::color::Color;
 use speedy2d::image::{ImageDataType, ImageSmoothingMode};
 use speedy2d::shape::Rectangle;
 use speedy2d::window::{WindowHandler, WindowHelper};
@@ -24,21 +23,14 @@ use crate::computer::cpu_structs::{map_byte_to_instruction, AddressingMode, Inst
 use crate::computer::ppu::FRAME_BUFFER_SIZE;
 use crate::computer::ppu_structs::PPUCTRL;
 
-// const MASTER_CLOCKSPEED: u32 = 21_477_272;
-// const PPU_CLOCKSPEED: u32 = MASTER_CLOCKSPEED / 4;
-// const CPU_CLOCKSPEED: u32 = MASTER_CLOCKSPEED / 12;
-// const CPU_CYCLES_PER_FRAME: f64 = 29780.5;
-
-const PPU_CYCLES_PER_SECOND: u64 = 5_369_316;
 const PPU_SCANLINES_PER_FRAME: u64 = 262;
 const PPU_CYCLES_PER_SCANLINES: u64 = 341;
 const PPU_CYCLES_PER_FRAME: u64 = PPU_SCANLINES_PER_FRAME * PPU_CYCLES_PER_SCANLINES;
 
-const CPU_CYCLES_PER_SECOND: u64 = 1_789_772;
 const CPU_CYCLES_PER_FRAME: u64 = PPU_CYCLES_PER_FRAME / 3;
 const LENGTH_OF_FRAME: f64 = 1.0 / 60.0;
 
-const LOUD: bool = true;
+const LOUD: bool = false;
 
 #[derive(Debug, Default)]
 pub struct Computer {
@@ -300,14 +292,14 @@ impl WindowHandler for Computer {
                 if self.address_space.ppu.ppu_ctrl & PPUCTRL::GEN_NMI.bits()
                     == PPUCTRL::GEN_NMI.bits()
                 {
-                    // pause when entering NMI
-                    let mut line = String::new();
-                    let b1 = std::io::stdin().read_line(&mut line).unwrap();
-
-                    // update render
-                    // graphics.draw_circle((100.0, 100.0), 75.0, Color::BLUE);
                     let buffer: [(u8, u8, u8); FRAME_BUFFER_SIZE] =
                         self.address_space.ppu.render_frame();
+
+                    // uncomment to pause when entering NMI
+                    // println!("---- NMI ----");
+                    // let mut line = String::new();
+                    // let b1 = std::io::stdin().read_line(&mut line).unwrap();
+
                     let mut new_buffer: [u8; FRAME_BUFFER_SIZE * 3] = [0; FRAME_BUFFER_SIZE * 3];
 
                     let mut j = 0;
@@ -321,18 +313,20 @@ impl WindowHandler for Computer {
                         j += 1;
                     }
 
+                    // println!("{:?}", new_buffer);
+
                     let frame = graphics
                         .create_image_from_raw_pixels(
                             ImageDataType::RGB,
-                            ImageSmoothingMode::NearestNeighbor,
+                            ImageSmoothingMode::Linear,
                             (256, 240),
                             &new_buffer,
                         )
                         .unwrap();
 
-                    // graphics.draw_image((0.0,0.0), &frame);
+                    // graphics.draw_image((0.0, 0.0), &frame);
                     graphics.draw_rectangle_image(
-                        Rectangle::from_tuples((0.0, 0.0), (512.0, 480.0)),
+                        Rectangle::from_tuples((0.0, 0.0), (1024.0, 960.0)),
                         &frame,
                     );
 

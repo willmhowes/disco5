@@ -34,7 +34,7 @@ fn main() {
     // let closure = |num: u16| -> bool { false };
     // computer.run_program(false, closure);
 
-    let window = Window::new_centered("Disco5", (512, 480)).unwrap();
+    let window = Window::new_centered("Disco5", (1024, 960)).unwrap();
     window.run_loop(computer);
 
 

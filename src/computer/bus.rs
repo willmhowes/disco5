@@ -84,7 +84,10 @@ impl IndexMut<usize> for Bus {
                 self.ppu.ppu_addr_low = new_address as u8;
                 self.ppu.ppu_addr_high = (new_address >> 8) as u8;
 
-                // println!("0x{:0>4x}", address);
+                // uncomment to print address in 0x2006 being written to
+                // println!("--------------------- 0x2007, to 0x{:0>4x}", address);
+                // let mut line = String::new();
+                // let b1 = std::io::stdin().read_line(&mut line).unwrap();
                 // println!("{:?}", &self.ppu.memory[0x2000..0x2400]);
 
                 // return address from ppu_addr before it was incremented
@@ -93,7 +96,7 @@ impl IndexMut<usize> for Bus {
             // 0x4014 => todo!(),
             // 0x4016 => todo!(),
             _ => {
-                // println!("WRITING TO: 0x{:0>2x}", self.bytes[index]);
+                // println!("WRITING TO: 0x{:0>4x}", index);
                 &mut self.bytes[index]
             }
         }

@@ -156,16 +156,18 @@ impl CPU {
                 }
             }
         };
-        // if     output.0 == 0x2000
+        // uncomment to pause when accessing certain memory mapped registers
+        // if  (   output.0 == 0x2000
         //     || output.0 == 0x2001
         //     || output.0 == 0x2002
         //     || output.0 == 0x2003
         //     || output.0 == 0x2004
         //     || output.0 == 0x2005
         //     || output.0 == 0x2006
-        //     // || output.0 == 0x2007
-        // {
-        //     println!("HIT PPU REGISTER = 0x{:x}", output.0);
+        //     || output.0 == 0x2007
+        //     || output.0 == 0x4014)
+        //     && self.clock > 70_000 {
+        //     println!("--------------------- HIT PPU REGISTER = 0x{:x}", output.0);
         //     let mut line = String::new();
         //     let b1 = std::io::stdin().read_line(&mut line).unwrap();
         // }
