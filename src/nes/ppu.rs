@@ -62,23 +62,26 @@ impl Default for PPU {
 impl PPU {
     // (X,Y) (256,240) (32,30)
     fn fetch_nametable_byte(&self, x_pixel: &mut usize, y_pixel: &mut usize) -> u8 {
-        // floor divide coodinates to get nametable coordinate
-        let x = *x_pixel / TILE_SIZE;
-        let y = *y_pixel / TILE_SIZE;
-        let index = y * FRAME_WIDTH_IN_TILES + x;
-        let index = index + 0x2000;
+        // calculate nametable coordinate
+        let x_nametable = *x_pixel / TILE_SIZE;
+        let y_nametable = *y_pixel / TILE_SIZE;
+        let index = y_nametable * FRAME_WIDTH_IN_TILES + x_nametable;
+        // TODO: add support for all 4 nametables
+        let index = index + 0x2000; // add nametable address to index
         self.memory[index]
     }
 
     fn fetch_attribute_byte(&self, x_pixel: &mut usize, y_pixel: &mut usize) -> u8 {
-        let x = *x_pixel / ATTRIBUTE_TABLE_COVERAGE_SIZE;
-        let y = *y_pixel / ATTRIBUTE_TABLE_COVERAGE_SIZE;
-        let index = y * 8 + x;
-        let index = index + 0x23C0;
+        // calculate attribute table coordinate
+        let x_attribute_table = *x_pixel / ATTRIBUTE_TABLE_COVERAGE_SIZE;
+        let y_attribute_table = *y_pixel / ATTRIBUTE_TABLE_COVERAGE_SIZE;
+        let index = y_attribute_table * 8 + x_attribute_table;
+        // TODO: add support for all 4 nametables
+        let index = index + 0x23C0; // add attribute table address to index
         self.memory[index]
     }
 
-    /// returns back subpalette index in the lowest two bytes
+    /// returns back subpalette index in the lowest two bytes of a u8
     fn fetch_attribute_byte_subpalette_index(
         &self,
         attribute_byte: u8,
@@ -120,7 +123,7 @@ impl PPU {
         (self.memory[index], self.memory[index + 8])
     }
 
-    pub fn render_tile(
+    pub fn render_tile_line(
         &self,
         buffer: &mut [(u8, u8, u8)],
         x_pixel: &mut usize,
@@ -168,7 +171,7 @@ impl PPU {
         }
     }
 
-    pub fn render_line(
+    pub fn render_frame_line(
         &self,
         buffer: &mut [(u8, u8, u8)],
         x_pixel: &mut usize,
@@ -176,7 +179,7 @@ impl PPU {
     ) {
         for i in 0..FRAME_WIDTH_IN_TILES {
             let tile_ref = &mut buffer[TILE_SIZE * i..TILE_SIZE * i + TILE_SIZE];
-            self.render_tile(tile_ref, x_pixel, y_pixel);
+            self.render_tile_line(tile_ref, x_pixel, y_pixel);
             *x_pixel += 8;
         }
     }
@@ -187,7 +190,7 @@ impl PPU {
         let mut y_pixel: usize = 0;
         for i in 0..FRAME_HEIGHT {
             let line_ref = &mut frame_buffer[FRAME_WIDTH * i..FRAME_WIDTH * i + FRAME_WIDTH];
-            self.render_line(line_ref, &mut x_pixel, &mut y_pixel);
+            self.render_frame_line(line_ref, &mut x_pixel, &mut y_pixel);
             y_pixel += 1;
             x_pixel = 0;
         }
