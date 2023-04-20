@@ -1,4 +1,4 @@
-use crate::computer::ppu_structs::{PPUCTRL, SYSTEM_COLOR_PALETTE};
+use crate::nes::ppu_structs::{PPUCTRL, SYSTEM_COLOR_PALETTE};
 
 const PPU_MEMORY_SIZE: usize = 0x4000;
 const OAM_SIZE: usize = 0x100;

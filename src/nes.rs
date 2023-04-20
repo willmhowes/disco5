@@ -17,11 +17,11 @@ pub mod cpu_structs;
 pub mod ppu;
 pub mod ppu_structs;
 
-use crate::computer::bus::Bus;
-use crate::computer::cpu::{StatusRegister, CPU};
-use crate::computer::cpu_structs::{map_byte_to_instruction, AddressingMode, Instruction};
-use crate::computer::ppu::FRAME_BUFFER_SIZE;
-use crate::computer::ppu_structs::PPUCTRL;
+use crate::nes::bus::Bus;
+use crate::nes::cpu::{CPU};
+use crate::nes::cpu_structs::{map_byte_to_instruction, AddressingMode, Instruction};
+use crate::nes::ppu::FRAME_BUFFER_SIZE;
+use crate::nes::ppu_structs::PPUCTRL;
 
 const PPU_SCANLINES_PER_FRAME: u64 = 262;
 const PPU_CYCLES_PER_SCANLINES: u64 = 341;
@@ -33,10 +33,9 @@ const LENGTH_OF_FRAME: f64 = 1.0 / 60.0;
 const LOUD: bool = false;
 
 #[derive(Debug, Default)]
-pub struct Computer {
+pub struct NES {
     pub cpu: CPU,
     pub address_space: Bus,
-    pub flags: StatusRegister,
     pub clock: u64,
 }
 
@@ -58,7 +57,7 @@ fn byte_dump(memory: &[u8]) {
     }
 }
 
-impl Computer {
+impl NES {
     pub fn tick(&mut self, num: u8) {
         self.clock += u64::from(num);
     }
@@ -254,7 +253,7 @@ impl Computer {
     }
 }
 
-impl WindowHandler for Computer {
+impl WindowHandler for NES {
     fn on_draw(&mut self, helper: &mut WindowHelper, graphics: &mut Graphics2D) {
         let mut cpu_clockspeed_manager = Instant::now();
         loop {

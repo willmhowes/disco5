@@ -1,8 +1,8 @@
-use disco5::computer::*;
+use disco5::nes::*;
 
 #[test]
 fn test_6502_functional() {
-    let mut computer: Computer = Default::default();
+    let mut computer: NES = Default::default();
 
     computer
         .load_program_from_hex(

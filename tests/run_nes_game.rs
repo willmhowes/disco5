@@ -1,9 +1,9 @@
-use disco5::computer::*;
+use disco5::nes::*;
 use speedy2d::Window;
 
 #[test]
 fn test_nes_game() {
-    let mut computer: Computer = Default::default();
+    let mut computer: NES = Default::default();
 
     computer
         .load_nes_rom(&String::from("sample_programs/Donkey Kong.nes"), 0x8000)

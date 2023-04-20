@@ -129,7 +129,7 @@ pub enum Instruction {
     TXS(AddressingMode),
     /// transfer Y to accumulator
     TYA(AddressingMode),
-    /// execute NMI, not programmable
+    /// execute NMI, not a true instruction
     NMI(AddressingMode),
     Invalid(u8),
 }

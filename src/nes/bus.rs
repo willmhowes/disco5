@@ -1,4 +1,4 @@
-use crate::computer::{cpu::ReadWrite, ppu::PPU, ppu_structs::PPUCTRL};
+use crate::nes::{cpu::ReadWrite, ppu::PPU, ppu_structs::PPUCTRL};
 use std::ops::{Index, IndexMut};
 
 const CPU_MEMORY_SIZE: usize = 0x10000;

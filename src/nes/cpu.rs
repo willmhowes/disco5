@@ -1,5 +1,5 @@
-use crate::computer::bus::Bus;
-use crate::computer::cpu_structs::{AddressingMode, Instruction};
+use crate::nes::bus::Bus;
+use crate::nes::cpu_structs::{AddressingMode, Instruction};
 
 /// Type for storing CPU registers as fields
 #[derive(Copy, Clone, Default, Debug)]
@@ -16,12 +16,6 @@ pub struct CPU {
     pub pc: u16,
     /// status register
     pub p: StatusRegister,
-    /// read/write pin. low is write
-    pub rw: ReadWrite,
-    /// interrupt pin
-    pub irq: bool,
-    /// non-maskable interrupt pin
-    pub nmi: bool,
     pub clock: u64,
     pub time_since_last_frame: u64,
 }

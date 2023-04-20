@@ -1,8 +1,8 @@
-use disco5::computer::*;
+use disco5::nes::*;
 
 #[test]
 fn countdown_program() {
-    let mut computer: Computer = Default::default();
+    let mut computer: NES = Default::default();
 
     computer
         .load_program(&String::from("sample_programs/countdown.txt"))

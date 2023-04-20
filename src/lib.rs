@@ -2,4 +2,4 @@
 // 6502 hexdump Decoder
 // Author: Will Howes
 
-pub mod computer;
+pub mod nes;
