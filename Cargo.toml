@@ -5,4 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "disco5"
+path = "src/lib.rs"
+
+[[bin]]
+name = "disco5"
+path = "src/bin.rs"
+
 [dependencies]
+bitflags = "2.1.0"
+speedy2d = "1.12.0"
