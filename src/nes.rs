@@ -18,8 +18,8 @@ pub mod ppu;
 pub mod ppu_structs;
 
 use crate::nes::bus::Bus;
-use crate::nes::cpu::{CPU};
-use crate::nes::cpu_structs::{map_byte_to_instruction, AddressingMode, Instruction};
+use crate::nes::cpu::CPU;
+use crate::nes::cpu_structs::{decode_instruction, Instruction};
 use crate::nes::ppu::FRAME_BUFFER_SIZE;
 use crate::nes::ppu_structs::PPUCTRL;
 
@@ -36,7 +36,6 @@ const LOUD: bool = false;
 pub struct NES {
     pub cpu: CPU,
     pub address_space: Bus,
-    pub clock: u64,
 }
 
 fn byte_dump(memory: &[u8]) {
@@ -58,11 +57,7 @@ fn byte_dump(memory: &[u8]) {
 }
 
 impl NES {
-    pub fn tick(&mut self, num: u8) {
-        self.clock += u64::from(num);
-    }
-
-    pub fn load_program(&mut self, filename: &str) -> io::Result<()> {
+    pub fn load_asm_6502js(&mut self, filename: &str) -> io::Result<()> {
         let memory = &mut self.address_space;
         let cpu = &mut self.cpu;
         // Load file contents into a buffer
@@ -95,7 +90,7 @@ impl NES {
         Ok(())
     }
 
-    pub fn load_program_from_hex(
+    pub fn load_asm_as65(
         &mut self,
         filename: &str,
         memory_entry_point: usize,
@@ -114,7 +109,7 @@ impl NES {
         Ok(())
     }
 
-    fn process_header(memory: &[u8]) {
+    fn process_ines_header(memory: &[u8]) {
         println!("--------------------");
         println!("| Header Bytes     |");
         println!("--------------------");
@@ -171,7 +166,7 @@ impl NES {
         println!("--------------------");
     }
 
-    pub fn load_nes_rom(&mut self, filename: &str, memory_entry_point: usize) -> io::Result<()> {
+    pub fn load_nrom_128(&mut self, filename: &str, memory_entry_point: usize) -> io::Result<()> {
         // Load file contents into memory array
         let f = File::open(filename)?;
         let mut f = BufReader::new(f);
@@ -187,7 +182,7 @@ impl NES {
         f.read_exact(cpu_memory_1)?;
 
         // This should be the only time the PPU's memory is directly addressed
-        let ppu_memory = &mut self.address_space.ppu.memory[..0x2000];
+        let ppu_memory = &mut self.address_space.ppu.address_space[..0x2000];
         f.read_exact(ppu_memory)?;
 
         let lo = self.address_space.bytes[0xfffc];
@@ -199,57 +194,27 @@ impl NES {
         Ok(())
     }
 
-    pub fn run_program(&mut self, loud: bool, exit_condition: fn(u16) -> bool) {
-        let mut time_since_last_frame: u64 = 0;
-        let mut cpu_clockspeed_manager = Instant::now();
-        let mut ppu_clockspeed_manager = Instant::now();
-
-        loop {
+    pub fn run_cpu_program(&mut self, loud: bool, exit_condition: fn(u16) -> bool) {
+        while exit_condition(self.cpu.pc) == false {
             if loud {
                 println!("--------------------");
                 println!("Clock = {}", self.cpu.clock);
                 self.cpu.print_state();
             }
             let instruction = self.cpu.fetch_instruction(&self.address_space);
-            let (instruction, minimum_ticks) = map_byte_to_instruction(instruction);
+            let (instruction, minimum_ticks) = decode_instruction(instruction);
             if loud {
                 println!("NEXT: {:?}, minimum {:?} ticks", instruction, minimum_ticks);
                 println!("--------------------");
             }
 
-            let ticks =
+            let _ =
                 self.cpu
-                    .process_instruction(instruction, minimum_ticks, &mut self.address_space);
-            time_since_last_frame += u64::from(ticks);
-
-            if time_since_last_frame >= CPU_CYCLES_PER_FRAME {
-                let elapsed_time = cpu_clockspeed_manager.elapsed().as_secs_f64();
-                if elapsed_time < LENGTH_OF_FRAME {
-                    let time_to_sleep =
-                        time::Duration::from_secs_f64(LENGTH_OF_FRAME - elapsed_time);
-                    println!("---- SLEEPING FOR {:?} ----", time_to_sleep);
-                    thread::sleep(time_to_sleep);
-                }
-                time_since_last_frame = 0;
-                cpu_clockspeed_manager = Instant::now();
-
-                if self.address_space.ppu.ppu_ctrl & PPUCTRL::GEN_NMI.bits()
-                    == PPUCTRL::GEN_NMI.bits()
-                {
-                    // update render
-                    // generate nmi
-                    // reset time_since_last_frame
-                    // allow however many cycles to occur before repeating nmi
-                }
-            }
-
-            if exit_condition(self.cpu.pc) == true {
-                println!("SUCCESS");
-                println!("CLOCK = {}", self.clock);
-                println!("PC    = 0x{:0>4x}", self.cpu.pc);
-                break;
-            }
+                    .execute_instruction(instruction, minimum_ticks, &mut self.address_space);
         }
+        println!("SUCCESS");
+        println!("CLOCK = {}", self.cpu.clock);
+        println!("PC    = 0x{:0>4x}", self.cpu.pc);
     }
 }
 
@@ -263,25 +228,23 @@ impl WindowHandler for NES {
                 self.cpu.print_state();
             }
             let instruction = self.cpu.fetch_instruction(&self.address_space);
-            let (instruction, minimum_ticks) = map_byte_to_instruction(instruction);
+            let (instruction, minimum_ticks) = decode_instruction(instruction);
             if LOUD {
                 println!("NEXT: {:?}, minimum {:?} ticks", instruction, minimum_ticks);
                 println!("--------------------");
             }
             let ticks =
                 self.cpu
-                    .process_instruction(instruction, minimum_ticks, &mut self.address_space);
+                    .execute_instruction(instruction, minimum_ticks, &mut self.address_space);
             self.cpu.time_since_last_frame += u64::from(ticks);
 
             if self.cpu.time_since_last_frame >= CPU_CYCLES_PER_FRAME {
                 // TODO: Adjust how frame sleeping works, probably going to be end up sleeping
                 // for too long the way it currently is
                 let elapsed_time = cpu_clockspeed_manager.elapsed().as_secs_f64();
-                // if elapsed_time < 2.0 {
                 if elapsed_time < LENGTH_OF_FRAME {
                     let time_to_sleep =
                         time::Duration::from_secs_f64(LENGTH_OF_FRAME - elapsed_time);
-                    // time::Duration::from_secs_f64(2.0);
                     println!("---- SLEEPING FOR {:?} ----", time_to_sleep);
                     thread::sleep(time_to_sleep);
                 }
@@ -312,27 +275,24 @@ impl WindowHandler for NES {
                         j += 1;
                     }
 
-                    // println!("{:?}", new_buffer);
-
                     let frame = graphics
                         .create_image_from_raw_pixels(
                             ImageDataType::RGB,
-                            ImageSmoothingMode::Linear,
+                            ImageSmoothingMode::NearestNeighbor,
                             (256, 240),
                             &new_buffer,
                         )
                         .unwrap();
 
-                    // graphics.draw_image((0.0, 0.0), &frame);
                     graphics.draw_rectangle_image(
                         Rectangle::from_tuples((0.0, 0.0), (1024.0, 960.0)),
                         &frame,
                     );
 
-                    let instruction = Instruction::NMI(AddressingMode::Implied);
+                    let instruction = Instruction::NMI;
                     let ticks =
                         self.cpu
-                            .process_instruction(instruction, 7, &mut self.address_space);
+                            .execute_instruction(instruction, 7, &mut self.address_space);
                     self.cpu.time_since_last_frame += u64::from(ticks);
                     break;
                 }

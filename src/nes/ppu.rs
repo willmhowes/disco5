@@ -35,9 +35,9 @@ pub struct PPU {
     /// OAM DMA high address
     pub oam_dma: u8,
     /// PPU address space
-    pub memory: [u8; PPU_MEMORY_SIZE],
+    pub address_space: [u8; PPU_MEMORY_SIZE],
     /// Object Attribute Memory (OAM) array
-    pub oam: [u8; OAM_SIZE],
+    pub oam_ram: [u8; OAM_SIZE],
 }
 
 impl Default for PPU {
@@ -53,8 +53,8 @@ impl Default for PPU {
             ppu_addr_high: Default::default(),
             ppu_addr_received_first_write: Default::default(),
             oam_dma: Default::default(),
-            memory: [0; PPU_MEMORY_SIZE],
-            oam: [0; OAM_SIZE],
+            address_space: [0; PPU_MEMORY_SIZE],
+            oam_ram: [0; OAM_SIZE],
         }
     }
 }
@@ -68,7 +68,7 @@ impl PPU {
         let index = y_nametable * FRAME_WIDTH_IN_TILES + x_nametable;
         // TODO: add support for all 4 nametables
         let index = index + 0x2000; // add nametable address to index
-        self.memory[index]
+        self.address_space[index]
     }
 
     fn fetch_attribute_byte(&self, x_pixel: &mut usize, y_pixel: &mut usize) -> u8 {
@@ -78,11 +78,11 @@ impl PPU {
         let index = y_attribute_table * 8 + x_attribute_table;
         // TODO: add support for all 4 nametables
         let index = index + 0x23C0; // add attribute table address to index
-        self.memory[index]
+        self.address_space[index]
     }
 
     /// returns back subpalette index in the lowest two bytes of a u8
-    fn fetch_attribute_byte_subpalette_index(
+    fn fetch_palette_index_from_attribute_byte(
         &self,
         attribute_byte: u8,
         x_pixel: &mut usize,
@@ -120,10 +120,10 @@ impl PPU {
         let index = background_pattern_table + usize::from(nametable_index) * 16;
         let line_within_tile = *y_pixel % TILE_SIZE;
         let index = index + line_within_tile;
-        (self.memory[index], self.memory[index + 8])
+        (self.address_space[index], self.address_space[index + 8])
     }
 
-    pub fn render_tile_line(
+    fn render_tile_line(
         &self,
         buffer: &mut [(u8, u8, u8)],
         x_pixel: &mut usize,
@@ -131,8 +131,10 @@ impl PPU {
     ) {
         let n = self.fetch_nametable_byte(x_pixel, y_pixel);
         let a = self.fetch_attribute_byte(x_pixel, y_pixel);
+        let (tile_line_low, tile_line_high) = self.fetch_line_from_pattern_table(n, y_pixel);
+
         // determine the tile's color palette
-        let palette_index = self.fetch_attribute_byte_subpalette_index(a, x_pixel, y_pixel);
+        let palette_index = self.fetch_palette_index_from_attribute_byte(a, x_pixel, y_pixel);
 
         // $3F00 	    Universal background color
         // $3F01-$3F03 	Background palette 0
@@ -141,10 +143,10 @@ impl PPU {
         // $3F0D-$3F0F 	Background palette 3
 
         // store each system color palette index
-        let color_0_index = self.memory[0x3f00];
-        let color_1_index = self.memory[0x3f01 + usize::from(palette_index) * 4];
-        let color_2_index = self.memory[0x3f02 + usize::from(palette_index) * 4];
-        let color_3_index = self.memory[0x3f03 + usize::from(palette_index) * 4];
+        let color_0_index = self.address_space[0x3f00];
+        let color_1_index = self.address_space[0x3f01 + usize::from(palette_index) * 4];
+        let color_2_index = self.address_space[0x3f02 + usize::from(palette_index) * 4];
+        let color_3_index = self.address_space[0x3f03 + usize::from(palette_index) * 4];
 
         // fetch rgb values for each color in color palette
         let color_0 = SYSTEM_COLOR_PALETTE[usize::from(color_0_index)];
@@ -152,7 +154,6 @@ impl PPU {
         let color_2 = SYSTEM_COLOR_PALETTE[usize::from(color_2_index)];
         let color_3 = SYSTEM_COLOR_PALETTE[usize::from(color_3_index)];
 
-        let (tile_line_low, tile_line_high) = self.fetch_line_from_pattern_table(n, y_pixel);
 
         // merge the low and high byte for each pixel and assign color to buffer
         let mut line_index: u8 = 0x80;
@@ -171,7 +172,7 @@ impl PPU {
         }
     }
 
-    pub fn render_frame_line(
+    fn render_frame_line(
         &self,
         buffer: &mut [(u8, u8, u8)],
         x_pixel: &mut usize,

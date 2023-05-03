@@ -3,9 +3,10 @@ use disco5::nes::*;
 #[test]
 fn countdown_program() {
     let mut computer: NES = Default::default();
+    computer.address_space.cpu_only_mode = true;
 
     computer
-        .load_program(&String::from("sample_programs/countdown.txt"))
+        .load_asm_6502js(&String::from("sample_programs/countdown.txt"))
         .unwrap(); // NOTE: verifies that program loaded without errors
 
     assert_eq!(
@@ -17,7 +18,7 @@ fn countdown_program() {
     );
 
     let closure = |num: u16| -> bool { num == 0x0264 };
-    computer.run_program(false, closure);
+    computer.run_cpu_program(false, closure);
 
     assert_eq!(
         &computer.address_space.bytes[16..32],

@@ -29,7 +29,7 @@ impl CPU {
         // println!("--------------------");
         println!("A  = 0b{:0>8b}, X = {}, Y = {}", self.a, self.x, self.y);
         println!("P  =   NV_BDIZC");
-        println!("     0b{:0>8b}", self.p.to_byte());
+        println!("     0b{:0>8b}", self.p.serialize());
         println!("PC = 0x{:0>4x}", self.pc);
         println!("SP = {}", self.sp);
         // println!("--------------------");
@@ -51,12 +51,6 @@ impl CPU {
     pub fn resolve_address_fetch(&mut self, am: AddressingMode, memory: &Bus) -> (u16, bool) {
         let output = {
             match am {
-                AddressingMode::Accumulator
-                | AddressingMode::Implied
-                | AddressingMode::Immediate
-                | AddressingMode::Relative => {
-                    panic!("Attempted to fetch an AddressingMode that is intended to be handled on a per instruction basis")
-                }
                 AddressingMode::Absolute => {
                     let lo = self.fetch_instruction(memory);
                     let hi = self.fetch_instruction(memory);
@@ -148,6 +142,12 @@ impl CPU {
                     let address = (u16::from(hi) << 8) + u16::from(lo);
                     (address, false)
                 }
+                AddressingMode::Accumulator
+                | AddressingMode::Implied
+                | AddressingMode::Immediate
+                | AddressingMode::Relative => {
+                    panic!("Attempted to fetch an AddressingMode that is intended to be handled on a per instruction basis")
+                }
             }
         };
         // uncomment to pause when accessing certain memory mapped registers
@@ -227,7 +227,7 @@ impl CPU {
         memory[usize::from(address)]
     }
 
-    pub fn process_instruction(
+    pub fn execute_instruction(
         &mut self,
         instruction: Instruction,
         minimum_ticks: u8,
@@ -430,7 +430,7 @@ impl CPU {
 
                     // store self.p on stack with a set b flag
                     let b: u8 = 0b0001_0000;
-                    let p = self.p.to_byte() | b;
+                    let p = self.p.serialize() | b;
 
                     self.push_stack(p, memory);
 
@@ -813,7 +813,7 @@ impl CPU {
             Instruction::PHP(am) => {
                 if let AddressingMode::Implied = am {
                     let b: u8 = 0b0001_0000;
-                    let p = self.p.to_byte() | b;
+                    let p = self.p.serialize() | b;
                     self.push_stack(p, memory);
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
@@ -831,7 +831,7 @@ impl CPU {
                 if let AddressingMode::Implied = am {
                     // bits 4 and 5 are ignored
                     let p = self.pop_stack(memory) & 0b1100_1111;
-                    self.p.set_from_byte(p)
+                    self.p.deserialize(p)
                 } else {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
@@ -902,7 +902,7 @@ impl CPU {
                 if let AddressingMode::Implied = am {
                     // bits 4 and 5 are ignored
                     let p = self.pop_stack(memory) & 0b1100_1111;
-                    self.p.set_from_byte(p);
+                    self.p.deserialize(p);
 
                     let lo = self.pop_stack(memory);
                     let hi = self.pop_stack(memory);
@@ -1049,29 +1049,25 @@ impl CPU {
                     panic!("Attempted to execute instruction with invalid AddressingMode");
                 }
             }
-            Instruction::NMI(am) => {
-                if let AddressingMode::Implied = am {
-                    let to_be_pushed = self.pc;
-                    let lo = to_be_pushed as u8;
-                    let hi = (to_be_pushed >> 8) as u8;
-                    self.push_stack(hi, memory);
-                    self.push_stack(lo, memory);
+            Instruction::NMI => {
+                let to_be_pushed = self.pc;
+                let lo = to_be_pushed as u8;
+                let hi = (to_be_pushed >> 8) as u8;
+                self.push_stack(hi, memory);
+                self.push_stack(lo, memory);
 
-                    let p = self.p.to_byte();
+                let p = self.p.serialize();
 
-                    self.push_stack(p, memory);
+                self.push_stack(p, memory);
 
-                    // fetch address of NMI vector
-                    let lo = memory[0xfffa];
-                    let hi = memory[0xfffb];
-                    let address = (u16::from(hi) << 8) + u16::from(lo);
-                    self.pc = address;
+                // fetch address of NMI vector
+                let lo = memory[0xfffa];
+                let hi = memory[0xfffb];
+                let address = (u16::from(hi) << 8) + u16::from(lo);
+                self.pc = address;
 
-                    // set interrupt disable flag
-                    self.p.i = true;
-                } else {
-                    panic!("Attempted to execute instruction with invalid AddressingMode");
-                }
+                // set interrupt disable flag
+                self.p.i = true;
             }
             Instruction::Invalid(byte) => panic!(
                 "Attempted to execute undocumented instruction : 0x{:x}",
@@ -1126,7 +1122,7 @@ const C: u8 = 0b0000_0001;
 
 impl StatusRegister {
     /// returns status register represented by an 8-bit number
-    pub fn to_byte(&self) -> u8 {
+    pub fn serialize(&self) -> u8 {
         // unused flag is always set to 1
         let mut byte: u8 = 0b0010_0000;
 
@@ -1142,7 +1138,7 @@ impl StatusRegister {
     }
 
     /// sets status register using an 8-bit number
-    pub fn set_from_byte(&mut self, p: u8) {
+    pub fn deserialize(&mut self, p: u8) {
         self.n = if p & N == N { true } else { false };
         self.v = if p & V == V { true } else { false };
         self.b = if p & B == B { true } else { false };

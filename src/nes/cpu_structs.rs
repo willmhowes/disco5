@@ -130,11 +130,13 @@ pub enum Instruction {
     /// transfer Y to accumulator
     TYA(AddressingMode),
     /// execute NMI, not a true instruction
-    NMI(AddressingMode),
+    NMI,
     Invalid(u8),
 }
 
-pub fn map_byte_to_instruction(byte: u8) -> (Instruction, u8) {
+/// translates a 6502 opcode into an Instruction and the minimum
+/// number of cycles that instruction performs
+pub fn decode_instruction(byte: u8) -> (Instruction, u8) {
     match byte {
         0x6d => (Instruction::ADC(AddressingMode::Absolute), 4),
         0x7d => (Instruction::ADC(AddressingMode::AbsoluteX), 4),
