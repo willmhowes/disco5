@@ -241,13 +241,16 @@ impl WindowHandler for NES {
             if self.cpu.time_since_last_frame >= CPU_CYCLES_PER_FRAME {
                 // TODO: Adjust how frame sleeping works, probably going to be end up sleeping
                 // for too long the way it currently is
-                let elapsed_time = cpu_clockspeed_manager.elapsed().as_secs_f64();
-                if elapsed_time < LENGTH_OF_FRAME {
-                    let time_to_sleep =
-                        time::Duration::from_secs_f64(LENGTH_OF_FRAME - elapsed_time);
-                    println!("---- SLEEPING FOR {:?} ----", time_to_sleep);
-                    thread::sleep(time_to_sleep);
-                }
+
+                // let elapsed_time = cpu_clockspeed_manager.elapsed().as_secs_f64();
+                // if elapsed_time < LENGTH_OF_FRAME {
+                //     let time_to_sleep =
+                //         time::Duration::from_secs_f64(LENGTH_OF_FRAME - elapsed_time);
+                //         if LOUD {
+                //             println!("---- SLEEPING FOR {:?} ----", time_to_sleep);
+                //         }
+                //     thread::sleep(time_to_sleep);
+                // }
                 self.cpu.time_since_last_frame = 0;
                 cpu_clockspeed_manager = Instant::now();
 
